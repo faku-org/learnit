@@ -49,11 +49,17 @@ export async function generateJSON<T>(
     opts
   );
 
-  // Strip markdown code blocks if present
-  const cleaned = text
-    .replace(/^```json\s*/i, "")
-    .replace(/\s*```$/i, "")
+  // Strip markdown fences (handles ```json, ```, and any leading/trailing whitespace)
+  let cleaned = text
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```\s*$/i, "")
     .trim();
+
+  // If there's still non-JSON preamble, extract the first JSON object or array
+  if (!cleaned.startsWith("{") && !cleaned.startsWith("[")) {
+    const match = cleaned.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
+    if (match) cleaned = match[1].trim();
+  }
 
   return JSON.parse(cleaned) as T;
 }

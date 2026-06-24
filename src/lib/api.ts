@@ -84,6 +84,46 @@ export const correctText = (data: { text: string; language: string; context?: st
     body: JSON.stringify(data),
   });
 
+export const getExercises = (params?: {
+  topic?: string;
+  language?: string;
+  type?: string;
+  q?: string;
+  limit?: number;
+  skip?: number;
+}) => {
+  const qs = new URLSearchParams();
+  if (params?.topic) qs.set("topic", params.topic);
+  if (params?.language) qs.set("language", params.language);
+  if (params?.type) qs.set("type", params.type);
+  if (params?.q) qs.set("q", params.q);
+  if (params?.limit != null) qs.set("limit", String(params.limit));
+  if (params?.skip != null) qs.set("skip", String(params.skip));
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  return request<{ exercises: Record<string, unknown>[]; total: number }>(
+    `/api/exercises${suffix}`,
+  );
+};
+
+export type Progress = {
+  pathId: string | null;
+  currentModuleIndex: number;
+  currentTopicIndex: number;
+  completedTopics: string[];
+  topicStats: Record<string, { total: number; correct: number }>;
+};
+
+export const getProgress = (pathId?: string) => {
+  const suffix = pathId ? `?pathId=${encodeURIComponent(pathId)}` : "";
+  return request<Progress>(`/api/progress${suffix}`);
+};
+
+export const saveProgress = (data: Partial<Progress>) =>
+  request<Progress>("/api/progress", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+
 // Streak
 export const getStreak = () =>
   request<{ currentStreak: number; longestStreak: number; lastSessionDate: string | null }>(

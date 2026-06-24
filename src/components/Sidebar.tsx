@@ -1,11 +1,12 @@
 import { motion } from "motion/react";
-import { Home, Target, BookOpen, Mic, Library, Settings } from "lucide-react";
+import { Home, Target, BookOpen, Mic, Library, Settings, History } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { href: "/", icon: Home, label: "Dashboard" },
   { href: "/goals", icon: Target, label: "Goals" },
   { href: "/learn", icon: BookOpen, label: "Learn" },
+  { href: "/exercises", icon: History, label: "Exercises" },
   { href: "/speak", icon: Mic, label: "Speak" },
   { href: "/vocabulary", icon: Library, label: "Vocabulary" },
 ] as const;

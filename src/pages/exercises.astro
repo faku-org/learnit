@@ -1,0 +1,8 @@
+---
+import AppLayout from "../layouts/AppLayout.astro";
+import { ExercisesPage } from "../components/ExercisesPage";
+---
+
+<AppLayout title="Exercises | LearnIt!">
+  <ExercisesPage client:only="react" />
+</AppLayout>

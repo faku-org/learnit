@@ -1,11 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "motion/react";
-import { Target, ArrowRight, Loader2 } from "lucide-react";
+import { Target, ArrowRight, Loader2, Check, Trash2, Plus } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { generatePath, updatePreferences } from "@/lib/api";
+import { generatePath, getPaths, deletePath, updatePreferences, getPreferences } from "@/lib/api";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 const containerVariants = {
   hidden: {},
@@ -18,31 +19,90 @@ const itemVariants = {
 
 type Topic = { name: string; order: number; description: string };
 type PathModule = { name: string; description: string; order: number; topics?: Topic[] };
-type GeneratedPath = { _id: string; language: string; objective: string; modules: PathModule[] };
+type LearningPath = {
+  _id: string;
+  language: string;
+  objective: string;
+  timeframe?: string;
+  modules: PathModule[];
+  active?: boolean;
+};
 
 export function GoalsPage() {
   const [language, setLanguage] = useState("");
   const [objective, setObjective] = useState("");
   const [timeframe, setTimeframe] = useState("6 months");
-  const [loading, setLoading] = useState(false);
-  const [currentPath, setCurrentPath] = useState<GeneratedPath | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const [paths, setPaths] = useState<LearningPath[]>([]);
+  const [activePathId, setActivePathId] = useState<string | null>(null);
+  const [loadingPaths, setLoadingPaths] = useState(true);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [settingActiveId, setSettingActiveId] = useState<string | null>(null);
+  const [newPath, setNewPath] = useState<LearningPath | null>(null);
+  const [showForm, setShowForm] = useState(false);
+
+  useEffect(() => {
+    Promise.allSettled([getPaths(), getPreferences()]).then(([pathsRes, prefsRes]) => {
+      if (pathsRes.status === "fulfilled") {
+        setPaths(pathsRes.value as LearningPath[]);
+      }
+      if (prefsRes.status === "fulfilled") {
+        setActivePathId(prefsRes.value.activePathId);
+      }
+      setLoadingPaths(false);
+    });
+  }, []);
+
+  const handleSetActive = async (id: string) => {
+    setSettingActiveId(id);
+    try {
+      await updatePreferences({ activePathId: id });
+      setActivePathId(id);
+      toast.success("Active path updated");
+    } catch {
+      toast.error("Failed to update active path");
+    } finally {
+      setSettingActiveId(null);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    setDeletingId(id);
+    try {
+      await deletePath(id);
+      setPaths((prev) => prev.filter((p) => p._id !== id));
+      if (activePathId === id) setActivePathId(null);
+      if (newPath?._id === id) setNewPath(null);
+      toast.success("Path deleted");
+    } catch {
+      toast.error("Failed to delete path");
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   const handleGenerate = async () => {
     if (!language || !objective) {
       toast.error("Language and objective are required");
       return;
     }
-    setLoading(true);
+    setGenerating(true);
     try {
       const path = await generatePath({ language, objective, timeframe, modules: 6 });
-      const generated = path as unknown as GeneratedPath;
-      setCurrentPath(generated);
+      const generated = path as unknown as LearningPath;
       await updatePreferences({ activePathId: generated._id });
+      setActivePathId(generated._id);
+      setPaths((prev) => [{ ...generated, active: true }, ...prev.map((p) => ({ ...p, active: false }))]);
+      setNewPath(generated);
+      setShowForm(false);
+      setLanguage("");
+      setObjective("");
+      setTimeframe("6 months");
       toast.success("Learning path generated!");
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Failed to generate path");
     } finally {
-      setLoading(false);
+      setGenerating(false);
     }
   };
 
@@ -54,62 +114,181 @@ export function GoalsPage() {
       className="px-6 py-8 max-w-3xl mx-auto w-full"
     >
       <motion.h1 variants={itemVariants} className="font-display text-3xl text-foreground mb-2">
-        Your Goal
+        Your Goals
       </motion.h1>
       <motion.p variants={itemVariants} className="text-muted-foreground mb-8">
-        Define what you want to achieve and the AI will create a personalized learning path.
+        Manage your learning paths or create a new one.
       </motion.p>
 
-      <motion.div variants={itemVariants} className="space-y-4">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm flex items-center gap-2">
-              <Target size={14} className="text-accent" />
-              Learning Goal
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Language</label>
-              <Input
-                placeholder="e.g., Japanese, French, German"
-                value={language}
-                onChange={(e) => setLanguage(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Objective</label>
-              <Input
-                placeholder="e.g., Hold basic conversations for travel"
-                value={objective}
-                onChange={(e) => setObjective(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Timeframe</label>
-              <Input
-                placeholder="e.g., 3 months, 6 months"
-                value={timeframe}
-                onChange={(e) => setTimeframe(e.target.value)}
-              />
-            </div>
-            <Button onClick={handleGenerate} disabled={loading} className="w-full gap-2">
-              {loading ? <Loader2 className="animate-spin" size={16} /> : <Target size={16} />}
-              {loading ? "Generating..." : "Generate Learning Path"}
-            </Button>
-          </CardContent>
-        </Card>
-      </motion.div>
+      {/* Existing paths */}
+      {loadingPaths ? (
+        <motion.div variants={itemVariants} className="flex items-center gap-2 text-muted-foreground text-sm mb-6">
+          <Loader2 size={14} className="animate-spin" />
+          Loading paths...
+        </motion.div>
+      ) : paths.length > 0 ? (
+        <motion.div variants={itemVariants} className="space-y-3 mb-8">
+          <h2 className="font-display text-lg text-foreground mb-3">Learning Paths</h2>
+          {paths.map((path) => {
+            const isActive = path._id === activePathId;
+            return (
+              <Card
+                key={path._id}
+                className={cn(
+                  "transition-colors",
+                  isActive && "border-primary/40 bg-primary/5",
+                )}
+              >
+                <CardHeader className="pb-2">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        {isActive && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-primary bg-primary/15 px-1.5 py-0.5 rounded">
+                            <Check size={9} />
+                            Active
+                          </span>
+                        )}
+                        <span className="font-medium">{path.language}</span>
+                      </CardTitle>
+                      <p className="text-xs text-muted-foreground mt-1 leading-snug">
+                        {path.objective}
+                        {path.timeframe && (
+                          <span className="text-muted-foreground/60"> &middot; {path.timeframe}</span>
+                        )}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {!isActive && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleSetActive(path._id)}
+                          disabled={settingActiveId === path._id}
+                          className="text-xs h-7 px-2"
+                        >
+                          {settingActiveId === path._id ? (
+                            <Loader2 size={12} className="animate-spin" />
+                          ) : (
+                            "Set active"
+                          )}
+                        </Button>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDelete(path._id)}
+                        disabled={deletingId === path._id}
+                        className="h-7 w-7 p-0 text-muted-foreground hover:text-red-400"
+                      >
+                        {deletingId === path._id ? (
+                          <Loader2 size={12} className="animate-spin" />
+                        ) : (
+                          <Trash2 size={13} />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <p className="text-xs text-muted-foreground">
+                    {path.modules.length} modules &middot;{" "}
+                    {path.modules.reduce((n, m) => n + (m.topics?.length ?? 0), 0)} topics
+                  </p>
+                </CardContent>
+              </Card>
+            );
+          })}
+          <Button asChild className="w-full gap-2 mt-2">
+            <a href="/learn">
+              Continue Learning
+              <ArrowRight size={14} />
+            </a>
+          </Button>
+        </motion.div>
+      ) : null}
 
-      {currentPath && currentPath.modules && (
+      {/* New path form */}
+      {paths.length > 0 && !showForm ? (
+        <motion.div variants={itemVariants}>
+          <Button
+            variant="outline"
+            onClick={() => setShowForm(true)}
+            className="w-full gap-2 text-muted-foreground"
+          >
+            <Plus size={14} />
+            Create new path
+          </Button>
+        </motion.div>
+      ) : (
+        <motion.div variants={itemVariants} className="space-y-4">
+          {paths.length > 0 && (
+            <h2 className="font-display text-lg text-foreground">New Path</h2>
+          )}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Target size={14} className="text-accent" />
+                Learning Goal
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Language</label>
+                <Input
+                  placeholder="e.g., Japanese, French, German"
+                  value={language}
+                  onChange={(e) => setLanguage(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Objective</label>
+                <Input
+                  placeholder="e.g., Hold basic conversations for travel"
+                  value={objective}
+                  onChange={(e) => setObjective(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Timeframe</label>
+                <Input
+                  placeholder="e.g., 3 months, 6 months"
+                  value={timeframe}
+                  onChange={(e) => setTimeframe(e.target.value)}
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button onClick={handleGenerate} disabled={generating} className="flex-1 gap-2">
+                  {generating ? (
+                    <Loader2 className="animate-spin" size={16} />
+                  ) : (
+                    <Target size={16} />
+                  )}
+                  {generating ? "Generating..." : "Generate Learning Path"}
+                </Button>
+                {paths.length > 0 && (
+                  <Button variant="ghost" onClick={() => setShowForm(false)} className="text-muted-foreground">
+                    Cancel
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
+
+      {/* Newly generated path preview */}
+      {newPath && newPath.modules && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, ease: "easeOut" }}
           className="mt-8 space-y-3"
         >
-          <h2 className="font-display text-xl text-foreground mb-4">Your Learning Path</h2>
-          {currentPath.modules.map((mod, i) => (
+          <h2 className="font-display text-xl text-foreground mb-4">
+            {newPath.language} Path
+          </h2>
+          {newPath.modules.map((mod, i) => (
             <Card key={i}>
               <CardHeader>
                 <CardTitle className="text-sm flex items-center gap-2">
@@ -132,12 +311,6 @@ export function GoalsPage() {
               </CardContent>
             </Card>
           ))}
-          <Button asChild className="w-full gap-2 mt-4">
-            <a href="/learn">
-              Start Learning
-              <ArrowRight size={14} />
-            </a>
-          </Button>
         </motion.div>
       )}
     </motion.div>
