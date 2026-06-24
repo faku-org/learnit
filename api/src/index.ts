@@ -3,6 +3,14 @@ import { cors } from "@elysiajs/cors";
 import { ObjectId } from "mongodb";
 import { connectDB, getDB } from "./db";
 import { GoalSchema, VocabularySchema } from "./schemas";
+import { generateJSON } from "./llm";
+import {
+  PATH_SYSTEM_PROMPT,
+  buildPathPrompt,
+  EXERCISE_SYSTEM_PROMPT,
+  buildExercisePrompt,
+  type ExerciseType,
+} from "./prompts";
 
 const app = new Elysia()
   .use(cors({ origin: "http://localhost:4321" }))
@@ -159,6 +167,136 @@ const app = new Elysia()
       return { error: "Not found" };
     }
     return { success: true };
+  })
+
+  // === Learning Path ===
+  .post("/api/path/generate", async ({ body, set }: any) => {
+    const { language, objective, timeframe, modules = 6 } = body;
+    if (!language || !objective) {
+      set.status = 400;
+      return { error: "language and objective are required" };
+    }
+
+    try {
+      const path = await generateJSON<{ modules: unknown[] }>(
+        PATH_SYSTEM_PROMPT,
+        buildPathPrompt(language, objective, timeframe ?? "", modules),
+        { temperature: 0.8, maxTokens: 4096 }
+      );
+
+      const db = await getDB();
+      const doc = {
+        language,
+        objective,
+        timeframe: timeframe ?? null,
+        modules: path.modules,
+        createdAt: new Date().toISOString(),
+      };
+      const result = await db.collection("paths").insertOne(doc);
+      return { _id: result.insertedId.toString(), ...doc };
+    } catch (err) {
+      set.status = 500;
+      return { error: "LLM generation failed", detail: String(err) };
+    }
+  })
+
+  .get("/api/path/current", async ({ set }) => {
+    const db = await getDB();
+    const path = await db
+      .collection("paths")
+      .findOne({}, { sort: { createdAt: -1 } });
+    if (!path) {
+      set.status = 404;
+      return { error: "No path found. Generate one first." };
+    }
+    return { ...path, _id: path._id.toString() };
+  })
+
+  // === Exercises ===
+  .post("/api/exercises/generate", async ({ body, set }: any) => {
+    const { language, level = "beginner", topic, type = "multiple_choice" } = body;
+    if (!language || !topic) {
+      set.status = 400;
+      return { error: "language and topic are required" };
+    }
+
+    const validTypes: ExerciseType[] = [
+      "multiple_choice",
+      "fill_blank",
+      "translation",
+      "conjugation",
+      "matching",
+    ];
+    if (!validTypes.includes(type)) {
+      set.status = 400;
+      return { error: `Invalid type. Use: ${validTypes.join(", ")}` };
+    }
+
+    try {
+      const exercise = await generateJSON<Record<string, unknown>>(
+        EXERCISE_SYSTEM_PROMPT,
+        buildExercisePrompt(language, level, topic, type as ExerciseType),
+        { temperature: 0.9, maxTokens: 2048 }
+      );
+
+      const db = await getDB();
+      const doc = {
+        language,
+        level,
+        topic,
+        ...exercise,
+        createdAt: new Date().toISOString(),
+      };
+      const result = await db.collection("exercises").insertOne(doc);
+      return { _id: result.insertedId.toString(), ...doc };
+    } catch (err) {
+      set.status = 500;
+      return { error: "LLM generation failed", detail: String(err) };
+    }
+  })
+
+  // === Grammar Correction ===
+  .post("/api/correct", async ({ body, set }: any) => {
+    const { text, language, context = "" } = body;
+    if (!text || !language) {
+      set.status = 400;
+      return { error: "text and language are required" };
+    }
+
+    const systemPrompt = `You are an expert ${language} language teacher.
+Correct the student's text and explain the errors.
+Be encouraging but precise.
+Return ONLY valid JSON.`;
+
+    const userPrompt = `Correct the following ${language} text:
+"${text}"
+${context ? `Context: ${context}` : ""}
+
+Return JSON:
+{
+  "original": "${text}",
+  "corrected": "the corrected version",
+  "errors": [
+    {
+      "original": "the incorrect part",
+      "correction": "the correct version",
+      "explanation": "why this was wrong"
+    }
+  ],
+  "overallFeedback": "brief encouraging feedback"
+}`;
+
+    try {
+      const result = await generateJSON<Record<string, unknown>>(
+        systemPrompt,
+        userPrompt,
+        { temperature: 0.3, maxTokens: 2048 }
+      );
+      return result;
+    } catch (err) {
+      set.status = 500;
+      return { error: "LLM correction failed", detail: String(err) };
+    }
   })
 
   .listen(3001);

@@ -10,6 +10,7 @@
     "@elysiajs/cors": "^1.2.0",
     "elysia": "^1.2.0",
     "mongodb": "^7.3.0",
+    "openai": "^6.44.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
