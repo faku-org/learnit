@@ -2,13 +2,17 @@ import { Elysia } from "elysia";
 import { cors } from "@elysiajs/cors";
 import { ObjectId } from "mongodb";
 import { connectDB, getDB } from "./db";
-import { GoalSchema, VocabularySchema } from "./schemas";
+import { GoalSchema, VocabularySchema, PreferencesSchema } from "./schemas";
 import { generateJSON } from "./llm";
 import {
   PATH_SYSTEM_PROMPT,
   buildPathPrompt,
   EXERCISE_SYSTEM_PROMPT,
   buildExercisePrompt,
+  EXPLAIN_SYSTEM_PROMPT,
+  buildExplainPrompt,
+  VOCAB_ENRICH_SYSTEM_PROMPT,
+  buildVocabEnrichPrompt,
   type ExerciseType,
 } from "./prompts";
 
@@ -157,6 +161,34 @@ const app = new Elysia()
     return { _id: result.insertedId.toString(), ...entry };
   })
 
+  .post("/api/vocabulary/:id/enrich", async ({ params: { id }, body, set }: any) => {
+    const { word, meaning, language, nativeLanguage = "english" } = body;
+    if (!word || !language) {
+      set.status = 400;
+      return { error: "word and language are required" };
+    }
+    try {
+      const enrichment = await generateJSON<{
+        type: string;
+        conjugations: { form: string; value: string }[];
+        example: string;
+        exampleTranslation: string;
+      }>(
+        VOCAB_ENRICH_SYSTEM_PROMPT,
+        buildVocabEnrichPrompt(word, meaning ?? "", language, nativeLanguage),
+        { temperature: 0.3, maxTokens: 1024 },
+      );
+      const db = await getDB();
+      await db
+        .collection("vocabulary")
+        .updateOne({ _id: new ObjectId(id) }, { $set: enrichment });
+      return enrichment;
+    } catch (err) {
+      set.status = 500;
+      return { error: "Enrichment failed", detail: String(err) };
+    }
+  })
+
   .delete("/api/vocabulary/:id", async ({ params: { id }, set }) => {
     const db = await getDB();
     const result = await db
@@ -202,9 +234,22 @@ const app = new Elysia()
 
   .get("/api/path/current", async ({ set }) => {
     const db = await getDB();
-    const path = await db
-      .collection("paths")
-      .findOne({}, { sort: { createdAt: -1 } });
+    const prefs = await db.collection("preferences").findOne({});
+    let path = null;
+    if (prefs?.activePathId) {
+      try {
+        path = await db
+          .collection("paths")
+          .findOne({ _id: new ObjectId(prefs.activePathId as string) });
+      } catch {
+        // invalid stored id, fall through
+      }
+    }
+    if (!path) {
+      path = await db
+        .collection("paths")
+        .findOne({}, { sort: { createdAt: -1 } });
+    }
     if (!path) {
       set.status = 404;
       return { error: "No path found. Generate one first." };
@@ -212,9 +257,78 @@ const app = new Elysia()
     return { ...path, _id: path._id.toString() };
   })
 
+  .get("/api/paths", async () => {
+    const db = await getDB();
+    const prefs = await db.collection("preferences").findOne({});
+    const activeId = (prefs?.activePathId as string | null) ?? null;
+    const paths = await db
+      .collection("paths")
+      .find()
+      .sort({ createdAt: -1 })
+      .toArray();
+    // JSON.parse(JSON.stringify) flushes BSON types from nested documents
+    return paths.map((p) => {
+      const id = p._id.toString();
+      const clean = JSON.parse(JSON.stringify({ ...p, _id: id })) as Record<string, unknown>;
+      return { ...clean, active: id === activeId };
+    });
+  })
+
+  .delete("/api/path/:id", async ({ params: { id }, set }) => {
+    const db = await getDB();
+    const result = await db
+      .collection("paths")
+      .deleteOne({ _id: new ObjectId(id) });
+    if (result.deletedCount === 0) {
+      set.status = 404;
+      return { error: "Not found" };
+    }
+    const prefs = await db.collection("preferences").findOne({});
+    if (prefs?.activePathId === id) {
+      await db.collection("preferences").updateOne({}, { $set: { activePathId: null } });
+    }
+    return { success: true };
+  })
+
+  .get("/api/preferences", async () => {
+    const db = await getDB();
+    const prefs = await db.collection("preferences").findOne({});
+    return {
+      activePathId: (prefs?.activePathId as string | null) ?? null,
+      nativeLanguage: (prefs?.nativeLanguage as string | undefined) ?? "english",
+    };
+  })
+
+  .post("/api/preferences", async ({ body, set }: any) => {
+    const { activePathId, nativeLanguage } = body as {
+      activePathId?: string | null;
+      nativeLanguage?: string;
+    };
+    const update: Record<string, unknown> = {};
+    if (activePathId !== undefined) update.activePathId = activePathId;
+    if (nativeLanguage !== undefined) update.nativeLanguage = nativeLanguage;
+    if (Object.keys(update).length === 0) {
+      set.status = 400;
+      return { error: "No valid fields provided" };
+    }
+    const db = await getDB();
+    await db.collection("preferences").updateOne({}, { $set: update }, { upsert: true });
+    const prefs = await db.collection("preferences").findOne({});
+    return {
+      activePathId: (prefs?.activePathId as string | null) ?? null,
+      nativeLanguage: (prefs?.nativeLanguage as string) ?? "english",
+    };
+  })
+
   // === Exercises ===
   .post("/api/exercises/generate", async ({ body, set }: any) => {
-    const { language, level = "beginner", topic, type = "multiple_choice" } = body;
+    const {
+      language,
+      level = "beginner",
+      topic,
+      type = "multiple_choice",
+      nativeLanguage = "english",
+    } = body;
     if (!language || !topic) {
       set.status = 400;
       return { error: "language and topic are required" };
@@ -235,7 +349,7 @@ const app = new Elysia()
     try {
       const exercise = await generateJSON<Record<string, unknown>>(
         EXERCISE_SYSTEM_PROMPT,
-        buildExercisePrompt(language, level, topic, type as ExerciseType),
+        buildExercisePrompt(language, level, topic, type as ExerciseType, nativeLanguage),
         { temperature: 0.9, maxTokens: 2048 }
       );
 
@@ -255,16 +369,66 @@ const app = new Elysia()
     }
   })
 
+  // === Exercise Explanation ===
+  .post("/api/exercises/explain", async ({ body, set }: any) => {
+    const { exercise, nativeLanguage = "english" } = body;
+    if (!exercise) {
+      set.status = 400;
+      return { error: "exercise is required" };
+    }
+    try {
+      const result = await generateJSON<{
+        correctAnswer: string;
+        keyPoints: string[];
+        explanation: string;
+        example: string;
+      }>(
+        EXPLAIN_SYSTEM_PROMPT,
+        buildExplainPrompt(
+          exercise as Record<string, unknown>,
+          nativeLanguage,
+        ),
+        { temperature: 0.5, maxTokens: 1024 },
+      );
+      return result;
+    } catch (err) {
+      set.status = 500;
+      return { error: "LLM explanation failed", detail: String(err) };
+    }
+  })
+
+  // === Translation ===
+  .post("/api/translate", async ({ body, set }: any) => {
+    const { text, targetLanguage = "english" } = body;
+    if (!text) {
+      set.status = 400;
+      return { error: "text is required" };
+    }
+    try {
+      const result = await generateJSON<{ translation: string }>(
+        `You are a precise translator. Translate text accurately and concisely.`,
+        `Translate the following text to ${targetLanguage}. If the text contains ___ placeholders, keep them as ___ in the translation. Return ONLY valid JSON: {"translation":"..."}
+
+Text: "${text}"`,
+        { temperature: 0.1, maxTokens: 256 },
+      );
+      return result;
+    } catch (err) {
+      set.status = 500;
+      return { error: "Translation failed", detail: String(err) };
+    }
+  })
+
   // === Grammar Correction ===
   .post("/api/correct", async ({ body, set }: any) => {
-    const { text, language, context = "" } = body;
+    const { text, language, context = "", nativeLanguage = "english" } = body;
     if (!text || !language) {
       set.status = 400;
       return { error: "text and language are required" };
     }
 
     const systemPrompt = `You are an expert ${language} language teacher.
-Correct the student's text and explain the errors.
+Correct the student's text and explain the errors in ${nativeLanguage}.
 Be encouraging but precise.
 Return ONLY valid JSON.`;
 
@@ -272,18 +436,18 @@ Return ONLY valid JSON.`;
 "${text}"
 ${context ? `Context: ${context}` : ""}
 
-Return JSON:
+Return JSON with all explanations and feedback written in ${nativeLanguage}:
 {
   "original": "${text}",
-  "corrected": "the corrected version",
+  "corrected": "the corrected version in ${language}",
   "errors": [
     {
       "original": "the incorrect part",
-      "correction": "the correct version",
-      "explanation": "why this was wrong"
+      "correction": "the correct version in ${language}",
+      "explanation": "why this was wrong (in ${nativeLanguage})"
     }
   ],
-  "overallFeedback": "brief encouraging feedback"
+  "overallFeedback": "brief encouraging feedback in ${nativeLanguage}"
 }`;
 
     try {

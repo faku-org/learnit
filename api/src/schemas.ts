@@ -72,7 +72,7 @@ export type Streak = z.infer<typeof StreakSchema>;
 // === Vocabulary ===
 export const VocabularySchema = z.object({
   word: z.string(),
-  translation: z.string(),
+  meaning: z.string(),
   language: z.string(),
   notes: z.string().optional(),
   context: z.string().optional(),
@@ -80,3 +80,11 @@ export const VocabularySchema = z.object({
 });
 
 export type Vocabulary = z.infer<typeof VocabularySchema>;
+
+// === Preferences ===
+export const PreferencesSchema = z.object({
+  activePathId: z.string().nullable().default(null),
+  nativeLanguage: z.string().default("english"),
+});
+
+export type Preferences = z.infer<typeof PreferencesSchema>;

@@ -25,7 +25,7 @@ export async function generateCompletion(
 ): Promise<string> {
   const openai = getClient();
   const response = await openai.chat.completions.create({
-    model: "deepseek-chat",
+    model: "deepseek-v4-flash",
     messages: [
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt },

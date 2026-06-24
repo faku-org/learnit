@@ -10,8 +10,10 @@
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro",
-    "api": "cd api && bun run src/index.ts",
-    "typecheck": "astro check"
+    "api": "cd api && bun run --preload ./src/preload.ts src/index.ts",
+    "typecheck": "bunx tsc --noEmit",
+    "lint": "bunx oxlint src",
+    "format": "bunx oxfmt src"
   },
   "dependencies": {
     "@astrojs/react": "^6.0.0",
@@ -33,6 +35,8 @@
   },
   "devDependencies": {
     "@types/react": "^19.2.17",
-    "@types/react-dom": "^19.2.3"
+    "@types/react-dom": "^19.2.3",
+    "oxfmt": "^0.56.0",
+    "oxlint": "^1.71.0"
   }
 }

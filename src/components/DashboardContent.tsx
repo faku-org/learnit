@@ -1,41 +1,53 @@
+import { useState, useEffect } from "react";
 import { motion } from "motion/react";
 import { Flame, ArrowRight } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { getStreak, getCurrentPath } from "@/lib/api";
 
 const containerVariants = {
   hidden: {},
-  show: {
-    transition: { staggerChildren: 0.09 },
-  },
+  show: { transition: { staggerChildren: 0.09 } },
 };
-
 const itemVariants = {
   hidden: { opacity: 0, y: 20 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.38, ease: "easeOut" } },
+  show: { opacity: 1, y: 0, transition: { duration: 0.38, ease: "easeOut" as const } },
 };
 
+type PathModule = { name: string; description: string; order: number };
+type Path = { language: string; objective: string; modules: PathModule[] };
+type Streak = { currentStreak: number; longestStreak: number };
+
 export function DashboardContent() {
+  const [streak, setStreak] = useState<Streak | null>(null);
+  const [path, setPath] = useState<Path | null>(null);
+
+  useEffect(() => {
+    getStreak().then(setStreak).catch(console.error);
+    getCurrentPath()
+      .then((data) => setPath(data as unknown as Path))
+      .catch(() => {});
+  }, []);
+
   return (
     <motion.div
       variants={containerVariants}
       initial="hidden"
       animate="show"
-      className="p-8 max-w-3xl"
+      className="px-6 py-8 max-w-3xl mx-auto w-full"
     >
-      <motion.h1
-        variants={itemVariants}
-        className="font-display text-3xl text-foreground mb-1"
-      >
+      <motion.h1 variants={itemVariants} className="font-display text-3xl text-foreground mb-1">
         LearnIt!
       </motion.h1>
       <motion.p variants={itemVariants} className="text-muted-foreground mb-8">
-        Welcome back. Keep the momentum going.
+        {streak && streak.currentStreak > 0
+          ? `${streak.currentStreak} day streak. Keep going.`
+          : "Welcome back. Keep the momentum going."}
       </motion.p>
 
       <motion.div
         variants={containerVariants}
-        className="grid grid-cols-1 sm:grid-cols-2 gap-4"
+        className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6"
       >
         <motion.div variants={itemVariants}>
           <Card className="h-full">
@@ -47,9 +59,11 @@ export function DashboardContent() {
             </CardHeader>
             <CardContent>
               <p className="font-display text-6xl text-foreground leading-none">
-                0
+                {streak?.currentStreak ?? 0}
               </p>
-              <p className="text-muted-foreground text-sm mt-2">days</p>
+              <p className="text-muted-foreground text-sm mt-2">
+                days &middot; longest: {streak?.longestStreak ?? 0}
+              </p>
             </CardContent>
           </Card>
         </motion.div>
@@ -62,12 +76,16 @@ export function DashboardContent() {
               </CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-3 flex-1">
-              <p className="text-muted-foreground text-sm">
-                No session started yet.
-              </p>
+              {path ? (
+                <p className="text-muted-foreground text-sm">
+                  {path.language} &middot; {path.objective}
+                </p>
+              ) : (
+                <p className="text-muted-foreground text-sm">No path set yet.</p>
+              )}
               <Button asChild className="mt-auto w-fit gap-2">
-                <a href="/learn">
-                  Start learning
+                <a href={path ? "/learn" : "/goals"}>
+                  {path ? "Continue" : "Set a goal"}
                   <ArrowRight size={14} />
                 </a>
               </Button>
@@ -75,6 +93,27 @@ export function DashboardContent() {
           </Card>
         </motion.div>
       </motion.div>
+
+      {path && path.modules && (
+        <motion.div variants={itemVariants}>
+          <h2 className="font-display text-xl text-foreground mb-4">Your Path</h2>
+          <div className="space-y-3">
+            {path.modules.map((mod, i) => (
+              <Card key={i}>
+                <CardHeader>
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <span className="text-accent font-display">{i + 1}</span>
+                    {mod.name}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-xs text-muted-foreground">{mod.description}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </motion.div>
+      )}
     </motion.div>
   );
 }

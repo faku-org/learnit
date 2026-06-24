@@ -1,0 +1,13 @@
+{
+  "$schema": "https://raw.githubusercontent.com/oxc-project/oxc/main/crates/oxc_linter/src/config.schema.json",
+  "plugins": ["react", "typescript"],
+  "rules": {
+    "no-unused-vars": "warn",
+    "no-console": "off",
+    "typescript/no-explicit-any": "warn",
+    "react/react-in-jsx-scope": "off"
+  },
+  "ignore": {
+    "patterns": ["dist/**", ".astro/**", "node_modules/**"]
+  }
+}

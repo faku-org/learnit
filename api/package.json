@@ -3,8 +3,8 @@
   "type": "module",
   "version": "0.0.1",
   "scripts": {
-    "dev": "bun run --watch src/index.ts",
-    "start": "bun run src/index.ts"
+    "dev": "bun run --preload ./src/preload.ts --watch src/index.ts",
+    "start": "bun run --preload ./src/preload.ts src/index.ts"
   },
   "dependencies": {
     "@elysiajs/cors": "^1.2.0",
