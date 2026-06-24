@@ -17,7 +17,7 @@ import {
 } from "./prompts";
 
 const app = new Elysia()
-  .use(cors({ origin: "http://localhost:4321" }))
+  .use(cors({ origin: [/localhost:\d+/, /\.eternum\.lat$/] }))
   .onStart(async () => {
     await connectDB();
   })
@@ -545,6 +545,6 @@ Return JSON with all explanations and feedback written in ${nativeLanguage}:
     return stored ? { ...stored, _id: stored._id.toString() } : update;
   })
 
-  .listen(3001);
+  .listen(Number(process.env.API_PORT) || 3001);
 
 console.log(`LearnIt! API running on http://localhost:${app.server?.port}`);
