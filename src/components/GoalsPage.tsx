@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
-import { motion } from "motion/react";
-import { Target, ArrowRight, Loader2, Check, Trash2, Plus } from "lucide-react";
+import { motion, AnimatePresence } from "motion/react";
+import { Target, ArrowRight, Loader2, Check, Trash2, Plus, ChevronLeft } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { generatePath, getPaths, deletePath, updatePreferences, getPreferences } from "@/lib/api";
+import { generatePath, getPaths, deletePath, updatePreferences, getPreferences, type CalibrationLevel } from "@/lib/api";
+import { CalibrationFlow } from "@/components/CalibrationFlow";
+import { AuthGuard } from "@/components/AuthGuard";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -40,6 +42,8 @@ export function GoalsPage() {
   const [settingActiveId, setSettingActiveId] = useState<string | null>(null);
   const [newPath, setNewPath] = useState<LearningPath | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [showCalibration, setShowCalibration] = useState(false);
+  const [nativeLanguage, setNativeLanguage] = useState("english");
 
   useEffect(() => {
     Promise.allSettled([getPaths(), getPreferences()]).then(([pathsRes, prefsRes]) => {
@@ -48,6 +52,7 @@ export function GoalsPage() {
       }
       if (prefsRes.status === "fulfilled") {
         setActivePathId(prefsRes.value.activePathId);
+        if (prefsRes.value.nativeLanguage) setNativeLanguage(prefsRes.value.nativeLanguage);
       }
       setLoadingPaths(false);
     });
@@ -81,14 +86,19 @@ export function GoalsPage() {
     }
   };
 
-  const handleGenerate = async () => {
+  const handleStartGenerate = () => {
     if (!language || !objective) {
       toast.error("Language and objective are required");
       return;
     }
+    setShowCalibration(true);
+  };
+
+  const handleGenerateWithLevel = async (startingLevel: CalibrationLevel) => {
+    setShowCalibration(false);
     setGenerating(true);
     try {
-      const path = await generatePath({ language, objective, timeframe, modules: 6 });
+      const path = await generatePath({ language, objective, timeframe, modules: 6, startingLevel });
       const generated = path as unknown as LearningPath;
       await updatePreferences({ activePathId: generated._id });
       setActivePathId(generated._id);
@@ -107,6 +117,7 @@ export function GoalsPage() {
   };
 
   return (
+    <AuthGuard>
     <motion.div
       variants={containerVariants}
       initial="hidden"
@@ -225,55 +236,96 @@ export function GoalsPage() {
           {paths.length > 0 && (
             <h2 className="font-display text-lg text-foreground">New Path</h2>
           )}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm flex items-center gap-2">
-                <Target size={14} className="text-accent" />
-                Learning Goal
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Language</label>
-                <Input
-                  placeholder="e.g., Japanese, French, German"
-                  value={language}
-                  onChange={(e) => setLanguage(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Objective</label>
-                <Input
-                  placeholder="e.g., Hold basic conversations for travel"
-                  value={objective}
-                  onChange={(e) => setObjective(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Timeframe</label>
-                <Input
-                  placeholder="e.g., 3 months, 6 months"
-                  value={timeframe}
-                  onChange={(e) => setTimeframe(e.target.value)}
-                />
-              </div>
-              <div className="flex gap-2">
-                <Button onClick={handleGenerate} disabled={generating} className="flex-1 gap-2">
-                  {generating ? (
-                    <Loader2 className="animate-spin" size={16} />
-                  ) : (
-                    <Target size={16} />
-                  )}
-                  {generating ? "Generating..." : "Generate Learning Path"}
-                </Button>
-                {paths.length > 0 && (
-                  <Button variant="ghost" onClick={() => setShowForm(false)} className="text-muted-foreground">
-                    Cancel
-                  </Button>
-                )}
-              </div>
-            </CardContent>
-          </Card>
+
+          <AnimatePresence mode="wait">
+            {!showCalibration ? (
+              <motion.div
+                key="form"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+              >
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <Target size={14} className="text-accent" />
+                      Learning Goal
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1 block">Language</label>
+                      <Input
+                        placeholder="e.g., Japanese, French, German"
+                        value={language}
+                        onChange={(e) => setLanguage(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1 block">Objective</label>
+                      <Input
+                        placeholder="e.g., Hold basic conversations for travel"
+                        value={objective}
+                        onChange={(e) => setObjective(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1 block">Timeframe</label>
+                      <Input
+                        placeholder="e.g., 3 months, 6 months"
+                        value={timeframe}
+                        onChange={(e) => setTimeframe(e.target.value)}
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <Button onClick={handleStartGenerate} disabled={generating} className="flex-1 gap-2">
+                        {generating ? (
+                          <Loader2 className="animate-spin" size={16} />
+                        ) : (
+                          <Target size={16} />
+                        )}
+                        {generating ? "Generating..." : "Continue"}
+                      </Button>
+                      {paths.length > 0 && (
+                        <Button variant="ghost" onClick={() => setShowForm(false)} className="text-muted-foreground">
+                          Cancel
+                        </Button>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            ) : (
+              <motion.div
+                key="calibration"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+              >
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <button
+                        onClick={() => setShowCalibration(false)}
+                        className="text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        <ChevronLeft size={14} />
+                      </button>
+                      Calibration — {language}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <CalibrationFlow
+                      language={language}
+                      nativeLanguage={nativeLanguage}
+                      onComplete={(level) => handleGenerateWithLevel(level)}
+                      onSkip={() => handleGenerateWithLevel("complete_beginner")}
+                    />
+                  </CardContent>
+                </Card>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </motion.div>
       )}
 
@@ -314,5 +366,6 @@ export function GoalsPage() {
         </motion.div>
       )}
     </motion.div>
+    </AuthGuard>
   );
 }

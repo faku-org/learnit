@@ -9,29 +9,47 @@ import {
   Loader2,
   HelpCircle,
   ArrowLeft,
-  Languages,
+  Volume2,
+  SkipForward,
   Map,
   ChevronRight,
+  Lightbulb,
+  Languages,
+  Bookmark,
+  type LucideProps,
 } from "lucide-react";
+import * as LucideIcons from "lucide-react";
+
+function ExerciseIcon({ name, ...props }: { name: string } & LucideProps) {
+  const Icon = (LucideIcons as Record<string, unknown>)[name] as React.FC<LucideProps> | undefined;
+  return Icon ? <Icon {...props} /> : null;
+}
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
-  generateExercise,
+  getNextExercise,
+  recordAnswer,
   explainExercise,
-  translateText,
   getCurrentPath,
   getPreferences,
   updateStreak,
   getProgress,
   saveProgress,
+  translateText,
+  addVocabulary,
+  enrichVocabulary,
   type Progress,
 } from "@/lib/api";
+import { getCachedPhraseTranslation, setCachedPhraseTranslation } from "@/components/ClickableText";
 import { PathRoadmap, type RoadmapModule } from "@/components/PathRoadmap";
+import { ClickableText, toLangCode, speakText, type WordMeaning } from "@/components/ClickableText";
+import { AuthGuard } from "@/components/AuthGuard";
+import { FeedbackModal } from "@/components/FeedbackModal";
 import { toast } from "sonner";
 
-const EXERCISE_TYPES = ["multiple_choice", "fill_blank", "translation"] as const;
 const QUEUE_SIZE = 2;
 const CORRECT_TO_ADVANCE = 3;
+const FEEDBACK_EVERY = 7;
 
 const containerVariants = {
   hidden: {},
@@ -51,6 +69,8 @@ type CurrentPath = {
 type Exercise = {
   _id?: string;
   type: string;
+  icon?: string;
+  context?: string;
   instruction: string;
   question?: string;
   sentence?: string;
@@ -60,11 +80,9 @@ type Exercise = {
   correctAnswer?: string;
   hint?: string;
   explanation?: string;
+  wordMeanings?: WordMeaning[];
 };
 
-// Normalize answer text for comparison.
-// - Strips punctuation and normalizes whitespace for all languages.
-// - For German: accepts plain ASCII substitutes (ä/ae→a, ö/oe→o, ü/ue→u, ß→ss).
 function normalizeAnswer(text: string, language: string): string {
   let s = text
     .toLowerCase()
@@ -73,13 +91,8 @@ function normalizeAnswer(text: string, language: string): string {
     .trim();
   if (language.toLowerCase() !== "german") return s;
   return s
-    .replace(/ä/g, "a")
-    .replace(/ö/g, "o")
-    .replace(/ü/g, "u")
-    .replace(/ß/g, "ss")
-    .replace(/ae/g, "a")
-    .replace(/oe/g, "o")
-    .replace(/ue/g, "u");
+    .replace(/ä/g, "a").replace(/ö/g, "o").replace(/ü/g, "u").replace(/ß/g, "ss")
+    .replace(/ae/g, "a").replace(/oe/g, "o").replace(/ue/g, "u");
 }
 
 type ExplanationResponse = {
@@ -104,7 +117,6 @@ function advanceTopic(progress: Progress, modules: RoadmapModule[]): Progress {
     modIdx++;
     topIdx = 0;
   }
-  // All done — stay at last position
   return {
     ...progress,
     completedTopics: completed,
@@ -125,14 +137,18 @@ export function LearnPage() {
   const [gaveUp, setGaveUp] = useState(false);
   const [explaining, setExplaining] = useState(false);
   const [detailedExpl, setDetailedExpl] = useState<ExplanationResponse | null>(null);
-  const [translation, setTranslation] = useState<string | null>(null);
-  const [translating, setTranslating] = useState(false);
   const [exerciseQueue, setExerciseQueue] = useState<Exercise[]>([]);
   const [currentPath, setCurrentPath] = useState<CurrentPath | null>(null);
   const [progress, setProgress] = useState<Progress | null>(null);
   const [activeTopicKey, setActiveTopicKey] = useState<string | null>(null);
   const [showRoadmap, setShowRoadmap] = useState(true);
   const [justAdvanced, setJustAdvanced] = useState(false);
+  const [answeredCount, setAnsweredCount] = useState(0);
+  const [showFeedback, setShowFeedback] = useState(false);
+  const [phraseTranslation, setPhraseTranslation] = useState<string | null>(null);
+  const [phraseTranslating, setPhraseTranslating] = useState(false);
+  const [savingWord, setSavingWord] = useState<string | null>(null);
+  const [showWordMenu, setShowWordMenu] = useState(false);
 
   const queueRef = useRef<Exercise[]>([]);
   const currentPathRef = useRef<CurrentPath | null>(null);
@@ -160,12 +176,10 @@ export function LearnPage() {
   }, [currentPath, progress, activeTopicKey]);
 
   const buildParams = useCallback(() => {
-    const type = EXERCISE_TYPES[Math.floor(Math.random() * EXERCISE_TYPES.length)];
     const path = currentPathRef.current;
     const language = path?.language ?? "japanese";
     const prog = progressRef.current;
     const activeKey = activeTopicRef.current;
-
     let topic = "greetings";
     if (path && prog) {
       if (activeKey) {
@@ -181,14 +195,7 @@ export function LearnPage() {
         topic = allTopics[Math.floor(Math.random() * allTopics.length)].name;
       }
     }
-
-    return {
-      language,
-      level: "beginner" as const,
-      topic,
-      type,
-      nativeLanguage: nativeLangRef.current,
-    };
+    return { language, topic, level: "beginner", nativeLanguage: nativeLangRef.current };
   }, []);
 
   const prefillQueue = useCallback(
@@ -198,7 +205,7 @@ export function LearnPage() {
       try {
         const results = await Promise.allSettled(
           Array.from({ length: needed }, () =>
-            generateExercise(buildParams()).then((d) => d as unknown as Exercise),
+            getNextExercise(buildParams()).then((d) => d as unknown as Exercise),
           ),
         );
         const fetched = results
@@ -233,9 +240,7 @@ export function LearnPage() {
         }
         if (pathId) {
           const prog = await getProgress(pathId).catch(() => null);
-          if (prog) {
-            setProgress(prog);
-          }
+          if (prog) setProgress(prog);
         }
         prefillQueue(QUEUE_SIZE);
       },
@@ -249,8 +254,9 @@ export function LearnPage() {
     setGaveUp(false);
     setExplaining(false);
     setDetailedExpl(null);
-    setTranslation(null);
-    setTranslating(false);
+    setPhraseTranslation(null);
+    setPhraseTranslating(false);
+    setShowWordMenu(false);
   };
 
   const fetchExercise = useCallback(async () => {
@@ -272,10 +278,10 @@ export function LearnPage() {
 
     setLoading(true);
     try {
-      const data = await generateExercise(buildParams());
+      const data = await getNextExercise(buildParams());
       setExercise(data as unknown as Exercise);
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Failed to generate exercise");
+      toast.error(e instanceof Error ? e.message : "Failed to load exercise");
     } finally {
       setLoading(false);
     }
@@ -290,45 +296,31 @@ export function LearnPage() {
   }, [prevExercise]);
 
   const persistProgress = useCallback(async (newProg: Progress) => {
-    try {
-      await saveProgress(newProg);
-    } catch {
-      // non-critical
-    }
+    try { await saveProgress(newProg); } catch { /* non-critical */ }
   }, []);
 
   const handleCorrectAnswer = useCallback(() => {
     const prog = progressRef.current;
     const path = currentPathRef.current;
     if (!prog || !path) return;
-
     const isOnCurrentTopic =
       activeTopicRef.current === null ||
       activeTopicRef.current === `${prog.currentModuleIndex}-${prog.currentTopicIndex}`;
-
-    if (!isOnCurrentTopic) return; // reviewing — don't track progression
-
+    if (!isOnCurrentTopic) return;
     const key = `${prog.currentModuleIndex}-${prog.currentTopicIndex}`;
     const stats = prog.topicStats[key] ?? { total: 0, correct: 0 };
     const newCorrect = stats.correct + 1;
-
     let newProg: Progress = {
       ...prog,
-      topicStats: {
-        ...prog.topicStats,
-        [key]: { total: stats.total + 1, correct: newCorrect },
-      },
+      topicStats: { ...prog.topicStats, [key]: { total: stats.total + 1, correct: newCorrect } },
     };
-
     if (newCorrect >= CORRECT_TO_ADVANCE) {
       newProg = advanceTopic(newProg, path.modules);
       setActiveTopicKey(null);
       setJustAdvanced(true);
-      // Clear queue so next exercises use the new topic
       queueRef.current = [];
       setExerciseQueue([]);
     }
-
     setProgress(newProg);
     persistProgress(newProg);
   }, [persistProgress]);
@@ -340,15 +332,11 @@ export function LearnPage() {
       activeTopicRef.current === null ||
       activeTopicRef.current === `${prog.currentModuleIndex}-${prog.currentTopicIndex}`;
     if (!isOnCurrentTopic) return;
-
     const key = `${prog.currentModuleIndex}-${prog.currentTopicIndex}`;
     const stats = prog.topicStats[key] ?? { total: 0, correct: 0 };
     const newProg = {
       ...prog,
-      topicStats: {
-        ...prog.topicStats,
-        [key]: { total: stats.total + 1, correct: stats.correct },
-      },
+      topicStats: { ...prog.topicStats, [key]: { total: stats.total + 1, correct: stats.correct } },
     };
     setProgress(newProg);
     persistProgress(newProg);
@@ -364,7 +352,6 @@ export function LearnPage() {
       const input = normalizeAnswer(textAnswer, lang);
       const answer = normalizeAnswer(exercise.correctAnswer ?? "", lang);
       isCorrect = input === answer;
-      // For fill_blank: also accept the full sentence with the blank filled in
       if (!isCorrect && exercise.type === "fill_blank" && exercise.sentence) {
         const full = exercise.sentence.replace(/___/g, exercise.correctAnswer ?? "");
         isCorrect = input === normalizeAnswer(full, lang);
@@ -372,11 +359,24 @@ export function LearnPage() {
     }
     setCorrect(isCorrect);
     setSubmitted(true);
+
+    // Record for SRS
+    if (exercise._id) {
+      recordAnswer({ exerciseId: exercise._id, correct: isCorrect }).catch(() => {});
+    }
+
     if (isCorrect) {
       updateStreak().catch(console.error);
       handleCorrectAnswer();
     } else {
       handleWrongAnswer();
+    }
+
+    // Feedback trigger
+    const next = answeredCount + 1;
+    setAnsweredCount(next);
+    if (next % FEEDBACK_EVERY === 0) {
+      setTimeout(() => setShowFeedback(true), 800);
     }
   };
 
@@ -384,6 +384,9 @@ export function LearnPage() {
     if (!exercise) return;
     setGaveUp(true);
     handleWrongAnswer();
+    if (exercise._id) {
+      recordAnswer({ exerciseId: exercise._id, correct: false, quality: 0 }).catch(() => {});
+    }
     setExplaining(true);
     try {
       const result = await explainExercise({
@@ -396,21 +399,56 @@ export function LearnPage() {
     } finally {
       setExplaining(false);
     }
+    const next = answeredCount + 1;
+    setAnsweredCount(next);
+    if (next % FEEDBACK_EVERY === 0) {
+      setTimeout(() => setShowFeedback(true), 800);
+    }
   };
 
-  const handleTranslate = async (text: string) => {
-    if (translation) {
-      setTranslation(null);
-      return;
+  const handleRetryLater = useCallback(() => {
+    if (!exercise) return;
+    const queue = queueRef.current;
+    if (queue.length > 0) {
+      const [next, ...rest] = queue;
+      const newQueue = [...rest, exercise];
+      queueRef.current = newQueue;
+      setExerciseQueue(newQueue);
+      setPrevExercise(null);
+      resetInteractionState();
+      setExercise(next);
+      setJustAdvanced(false);
+    } else {
+      queueRef.current = [exercise];
+      setExerciseQueue([exercise]);
+      resetInteractionState();
+      setExercise(null);
+      setJustAdvanced(false);
+      prefillQueue(QUEUE_SIZE);
     }
-    setTranslating(true);
+  }, [exercise, prefillQueue]);
+
+  const handleSaveWord = async (wm: WordMeaning) => {
+    const wordToSave = wm.infinitive || wm.word;
+    setSavingWord(wordToSave);
+    setShowWordMenu(false);
     try {
-      const result = await translateText({ text, targetLanguage: nativeLanguage });
-      setTranslation(result.translation);
-    } catch {
-      toast.error("Translation failed");
+      const saved = await addVocabulary({
+        word: wordToSave,
+        meaning: wm.meaning,
+        language: currentPath?.language ?? "",
+      }) as unknown as { _id: string };
+      toast.success(`Saved "${wordToSave}" to vocabulary`);
+      enrichVocabulary(saved._id, {
+        word: wordToSave,
+        meaning: wm.meaning,
+        language: currentPath?.language ?? "",
+        nativeLanguage,
+      }).catch(() => {});
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to save word");
     } finally {
-      setTranslating(false);
+      setSavingWord(null);
     }
   };
 
@@ -418,7 +456,6 @@ export function LearnPage() {
     (moduleIdx: number, topicIdx: number, _topicName: string) => {
       const key = `${moduleIdx}-${topicIdx}`;
       setActiveTopicKey(key);
-      // Clear queue so next exercise uses the selected topic
       queueRef.current = [];
       setExerciseQueue([]);
       resetInteractionState();
@@ -429,6 +466,8 @@ export function LearnPage() {
     [],
   );
 
+  // ── Main render ───────────────────────────────────────────────────────────
+
   const canSubmit =
     exercise &&
     !submitted &&
@@ -437,8 +476,15 @@ export function LearnPage() {
   const hasPath = Boolean(currentPath);
 
   return (
+    <AuthGuard>
     <div className="flex">
-      {/* Roadmap sidebar */}
+      {showFeedback && (
+        <FeedbackModal
+          exerciseCount={answeredCount}
+          onClose={() => setShowFeedback(false)}
+        />
+      )}
+
       <AnimatePresence>
         {hasPath && showRoadmap && currentPath && progress && (
           <motion.aside
@@ -448,7 +494,7 @@ export function LearnPage() {
             transition={{ duration: 0.25, ease: "easeOut" }}
             className="shrink-0 border-r border-border overflow-x-hidden overflow-y-auto sticky top-0 h-screen"
           >
-            <div className="w-[272px] py-8 px-4">
+            <div className="w-68 py-8 px-4">
               <PathRoadmap
                 language={currentPath.language}
                 modules={currentPath.modules}
@@ -465,7 +511,6 @@ export function LearnPage() {
         )}
       </AnimatePresence>
 
-      {/* Main area */}
       <motion.div
         variants={containerVariants}
         initial="hidden"
@@ -519,7 +564,7 @@ export function LearnPage() {
                   </p>
                   <Button onClick={fetchExercise} size="lg" className="gap-2">
                     <Shuffle size={16} />
-                    Generate Exercise
+                    Start Exercise
                   </Button>
                   {prevExercise && (
                     <Button
@@ -540,7 +585,7 @@ export function LearnPage() {
           {loading && (
             <motion.div variants={itemVariants} className="text-center py-12">
               <Loader2 className="animate-spin mx-auto mb-4 text-accent" size={32} />
-              <p className="text-muted-foreground">Generating exercise...</p>
+              <p className="text-muted-foreground">Loading exercise...</p>
             </motion.div>
           )}
 
@@ -558,54 +603,120 @@ export function LearnPage() {
                   <Card>
                     <CardHeader>
                       <CardTitle className="text-xs text-muted-foreground uppercase tracking-widest flex items-center justify-between">
-                        <span>{exercise.type.replace(/_/g, " ")}</span>
-                        {currentTopicName && (
-                          <span className="flex items-center gap-1 normal-case font-normal text-[11px]">
-                            <ChevronRight size={10} />
-                            {currentTopicName}
-                          </span>
-                        )}
+                        <span className="flex items-center gap-1.5">
+                          {exercise.icon && (
+                            <ExerciseIcon name={exercise.icon} size={13} className="text-accent/70 shrink-0" />
+                          )}
+                          {exercise.type.replace(/_/g, " ")}
+                        </span>
+                        <span className="flex items-center gap-2 normal-case font-normal">
+                          {currentTopicName && (
+                            <span className="flex items-center gap-1 text-[11px]">
+                              <ChevronRight size={10} />
+                              {currentTopicName}
+                            </span>
+                          )}
+                          {exercise.wordMeanings && exercise.wordMeanings.length > 0 && (
+                            <div className="relative">
+                              <button
+                                onClick={() => setShowWordMenu((v) => !v)}
+                                title="Save a word to vocabulary"
+                                className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                                disabled={!!savingWord}
+                              >
+                                {savingWord ? (
+                                  <Loader2 size={12} className="animate-spin" />
+                                ) : (
+                                  <Bookmark size={12} />
+                                )}
+                              </button>
+                              {showWordMenu && (
+                                <div className="absolute right-0 top-full mt-1 z-50 bg-card border border-border rounded-lg shadow-lg py-1 min-w-52">
+                                  <p className="px-3 pt-1 pb-1.5 text-[10px] text-muted-foreground border-b border-border mb-1">
+                                    Save to vocabulary
+                                  </p>
+                                  {exercise.wordMeanings.map((wm, i) => (
+                                    <button
+                                      key={i}
+                                      onClick={() => handleSaveWord(wm)}
+                                      className="w-full text-left px-3 py-2 text-xs hover:bg-secondary flex items-baseline gap-2"
+                                    >
+                                      <span className="font-medium text-foreground shrink-0">
+                                        {wm.infinitive || wm.word}
+                                      </span>
+                                      <span className="text-muted-foreground truncate">{wm.meaning}</span>
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </span>
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
+                      {exercise.context && (
+                        <div className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                          <Lightbulb size={12} className="shrink-0 mt-0.5 text-accent/70" />
+                          <span>{exercise.context}</span>
+                        </div>
+                      )}
                       <p className="text-foreground text-lg">{exercise.instruction}</p>
 
                       {(() => {
-                        const textToTranslate =
-                          exercise.type === "multiple_choice"
-                            ? exercise.question
-                            : exercise.type === "fill_blank"
-                              ? exercise.sentence
-                              : null;
+                        const lang = currentPath?.language ?? "japanese";
+                        const langCode = toLangCode(lang);
                         const displayText =
                           exercise.question ?? exercise.sentence ?? exercise.sourceText;
+                        const speakableText = displayText?.replace(/___/g, "");
+                        const handleTranslatePhrase = async () => {
+                          const cached = getCachedPhraseTranslation(displayText!, nativeLanguage);
+                          if (cached) { setPhraseTranslation(cached); return; }
+                          setPhraseTranslating(true);
+                          try {
+                            const res = await translateText({ text: displayText!, targetLanguage: nativeLanguage });
+                            setCachedPhraseTranslation(displayText!, nativeLanguage, res.translation);
+                            setPhraseTranslation(res.translation);
+                          } catch { /* silent */ } finally {
+                            setPhraseTranslating(false);
+                          }
+                        };
+
                         return (
                           <>
                             {displayText && (
-                              <p className="text-foreground font-medium text-lg">{displayText}</p>
-                            )}
-                            {textToTranslate && !gaveUp && (
-                              <div>
-                                <button
-                                  onClick={() => handleTranslate(textToTranslate)}
-                                  disabled={translating}
-                                  className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-                                >
-                                  {translating ? (
-                                    <Loader2 size={11} className="animate-spin" />
-                                  ) : (
-                                    <Languages size={11} />
-                                  )}
-                                  {translating
-                                    ? "Translating..."
-                                    : translation
-                                      ? "Hide translation"
-                                      : "Translate"}
-                                </button>
-                                {translation && !translating && (
-                                  <p className="text-xs text-muted-foreground mt-1.5 pl-3 border-l-2 border-border">
-                                    {translation}
+                              <div className="space-y-1.5">
+                                <div className="flex items-start gap-2">
+                                  <p className="flex-1 text-foreground font-medium text-lg leading-relaxed">
+                                    <ClickableText
+                                      text={displayText}
+                                      language={lang}
+                                      nativeLanguage={nativeLanguage}
+                                      wordMeanings={exercise.wordMeanings}
+                                    />
                                   </p>
+                                  <div className="flex shrink-0 gap-0.5 mt-1">
+                                    {speakableText && (
+                                      <button
+                                        onClick={() => speakText(speakableText, langCode)}
+                                        className="text-muted-foreground hover:text-foreground transition-colors rounded-lg p-1.5 hover:bg-secondary"
+                                        title="Listen to phrase"
+                                      >
+                                        <Volume2 size={16} />
+                                      </button>
+                                    )}
+                                    <button
+                                      onClick={handleTranslatePhrase}
+                                      disabled={phraseTranslating}
+                                      className="text-muted-foreground hover:text-foreground transition-colors rounded-lg p-1.5 hover:bg-secondary disabled:opacity-50"
+                                      title="Translate phrase"
+                                    >
+                                      <Languages size={16} />
+                                    </button>
+                                  </div>
+                                </div>
+                                {phraseTranslation && (
+                                  <p className="text-sm text-muted-foreground italic pl-0.5">{phraseTranslation}</p>
                                 )}
                               </div>
                             )}
@@ -667,6 +778,14 @@ export function LearnPage() {
                             <HelpCircle size={14} />
                             I don't know
                           </Button>
+                          <Button
+                            onClick={handleRetryLater}
+                            variant="ghost"
+                            className="text-muted-foreground gap-1.5 shrink-0"
+                            title="Skip and practice later"
+                          >
+                            <SkipForward size={14} />
+                          </Button>
                         </div>
                       )}
 
@@ -675,9 +794,7 @@ export function LearnPage() {
                           <div
                             className={[
                               "flex items-center gap-2 p-3 rounded-lg",
-                              correct
-                                ? "bg-accent/10 text-accent"
-                                : "bg-red-500/10 text-red-400",
+                              correct ? "bg-accent/10 text-accent" : "bg-red-500/10 text-red-400",
                             ].join(" ")}
                           >
                             {correct ? <Check size={16} /> : <X size={16} />}
@@ -701,16 +818,10 @@ export function LearnPage() {
                             </p>
                           )}
                           {exercise.explanation && (
-                            <p className="text-xs text-muted-foreground">
-                              {exercise.explanation}
-                            </p>
+                            <p className="text-xs text-muted-foreground">{exercise.explanation}</p>
                           )}
                           <div className="flex gap-2">
-                            <Button
-                              onClick={fetchExercise}
-                              variant="outline"
-                              className="flex-1 gap-2"
-                            >
+                            <Button onClick={fetchExercise} variant="outline" className="flex-1 gap-2">
                               <RefreshCw size={14} />
                               Next Exercise
                             </Button>
@@ -732,24 +843,15 @@ export function LearnPage() {
                         <div className="space-y-4">
                           {explaining && (
                             <div className="text-center py-6">
-                              <Loader2
-                                className="animate-spin mx-auto mb-3 text-accent"
-                                size={22}
-                              />
-                              <p className="text-xs text-muted-foreground">
-                                Generating explanation...
-                              </p>
+                              <Loader2 className="animate-spin mx-auto mb-3 text-accent" size={22} />
+                              <p className="text-xs text-muted-foreground">Generating explanation...</p>
                             </div>
                           )}
                           {detailedExpl && !explaining && (
                             <>
                               <div className="p-3 rounded-lg bg-accent/10">
-                                <p className="text-xs text-muted-foreground mb-1">
-                                  Correct answer
-                                </p>
-                                <p className="text-accent font-medium">
-                                  {detailedExpl.correctAnswer}
-                                </p>
+                                <p className="text-xs text-muted-foreground mb-1">Correct answer</p>
+                                <p className="text-accent font-medium">{detailedExpl.correctAnswer}</p>
                               </div>
                               {detailedExpl.keyPoints.length > 0 && (
                                 <div>
@@ -757,32 +859,22 @@ export function LearnPage() {
                                   <ul className="space-y-1.5">
                                     {detailedExpl.keyPoints.map((pt, i) => (
                                       <li key={i} className="flex items-start gap-2 text-sm">
-                                        <span className="text-accent mt-0.5 shrink-0">
-                                          &bull;
-                                        </span>
+                                        <span className="text-accent mt-0.5 shrink-0">&bull;</span>
                                         {pt}
                                       </li>
                                     ))}
                                   </ul>
                                 </div>
                               )}
-                              <p className="text-sm text-muted-foreground">
-                                {detailedExpl.explanation}
-                              </p>
+                              <p className="text-sm text-muted-foreground">{detailedExpl.explanation}</p>
                               {detailedExpl.example && (
                                 <div className="p-3 rounded-lg bg-secondary">
                                   <p className="text-xs text-muted-foreground mb-1">Example</p>
-                                  <p className="text-sm text-foreground">
-                                    {detailedExpl.example}
-                                  </p>
+                                  <p className="text-sm text-foreground">{detailedExpl.example}</p>
                                 </div>
                               )}
                               <div className="flex gap-2">
-                                <Button
-                                  onClick={fetchExercise}
-                                  variant="outline"
-                                  className="flex-1 gap-2"
-                                >
+                                <Button onClick={fetchExercise} variant="outline" className="flex-1 gap-2">
                                   <RefreshCw size={14} />
                                   Continue
                                 </Button>
@@ -810,5 +902,6 @@ export function LearnPage() {
         </div>
       </motion.div>
     </div>
+    </AuthGuard>
   );
 }

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { BookOpen, Plus, Trash2, Search, Loader2 } from "lucide-react";
+import { BookOpen, Plus, Trash2, Search, Loader2, RefreshCw } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -119,6 +119,25 @@ export function VocabularyPage() {
       toast.success("Deleted");
     } catch {
       toast.error("Failed to delete");
+    }
+  };
+
+  const handleReenrich = async (entry: VocabEntry) => {
+    setEnrichingId(entry._id);
+    try {
+      const enrichment = await enrichVocabulary(entry._id, {
+        word: entry.word,
+        meaning: entry.meaning,
+        language: entry.language,
+        nativeLanguage,
+      });
+      setEntries((prev) =>
+        prev.map((e) => (e._id === entry._id ? { ...e, ...enrichment } : e)),
+      );
+    } catch {
+      toast.error("Failed to enrich");
+    } finally {
+      setEnrichingId(null);
     }
   };
 
@@ -271,13 +290,11 @@ export function VocabularyPage() {
 
                       {/* Conjugations */}
                       {entry.conjugations && entry.conjugations.length > 0 && (
-                        <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs border-t border-border pt-3">
+                        <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs border-t border-border pt-3">
                           {entry.conjugations.map((c, i) => (
                             <div key={i} className="flex items-baseline gap-1.5 min-w-0">
-                              <span className="text-muted-foreground shrink-0">{c.form}</span>
-                              <span className="text-foreground font-medium truncate">
-                                {c.value}
-                              </span>
+                              <span className="text-foreground font-medium shrink-0">{c.value}</span>
+                              <span className="text-muted-foreground truncate">— {c.form}</span>
                             </div>
                           ))}
                         </div>
@@ -294,13 +311,23 @@ export function VocabularyPage() {
                       )}
                     </div>
 
-                    <button
-                      onClick={() => handleDelete(entry._id)}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity p-2 text-muted-foreground hover:text-red-400 rounded-lg hover:bg-red-500/5 shrink-0 mt-0.5"
-                      title="Delete"
-                    >
-                      <Trash2 size={14} />
-                    </button>
+                    <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5">
+                      <button
+                        onClick={() => handleReenrich(entry)}
+                        disabled={enrichingId === entry._id}
+                        className="p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-secondary disabled:opacity-40"
+                        title="Re-enrich"
+                      >
+                        <RefreshCw size={13} />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(entry._id)}
+                        className="p-2 text-muted-foreground hover:text-red-400 rounded-lg hover:bg-red-500/5"
+                        title="Delete"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
