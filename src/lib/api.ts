@@ -1,9 +1,16 @@
-const API = "http://localhost:3001";
+import { getAuthHeaders } from "./auth";
+
+const API = `http://localhost:${import.meta.env.PUBLIC_API_PORT ?? 3001}`;
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const authHeaders = getAuthHeaders();
   const res = await fetch(`${API}${path}`, {
-    headers: { "Content-Type": "application/json" },
     ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders,
+      ...(options?.headers as Record<string, string> | undefined),
+    },
   });
   if (!res.ok) {
     const error = await res.json().catch(() => ({ error: res.statusText }));
@@ -12,17 +19,44 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-// Goals
+// ── Auth ──────────────────────────────────────────────────────────────────────
+
+export const getMe = () =>
+  request<{ _id: string; email: string; name: string; picture?: string }>("/api/auth/me");
+
+// ── Goals ─────────────────────────────────────────────────────────────────────
+
 export const getGoals = () => request<Record<string, unknown>[]>("/api/goals");
 export const createGoal = (data: { language: string; objective: string; level: string }) =>
   request("/api/goals", { method: "POST", body: JSON.stringify(data) });
 
-// Path
+export type CalibrationLevel = "complete_beginner" | "some_basics" | "elementary" | "intermediate";
+
+export type CalibrationQuestion = {
+  topic: string;
+  question: string;
+  instruction: string;
+  options: string[];
+  correctIndex: number;
+};
+
+export const generateCalibrationQuestions = (data: {
+  language: string;
+  nativeLanguage?: string;
+}) =>
+  request<{ questions: CalibrationQuestion[] }>("/api/calibration/generate", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+
+// ── Path ──────────────────────────────────────────────────────────────────────
+
 export const generatePath = (data: {
   language: string;
   objective: string;
   timeframe: string;
   modules?: number;
+  startingLevel?: CalibrationLevel;
 }) =>
   request<Record<string, unknown>>("/api/path/generate", {
     method: "POST",
@@ -31,20 +65,24 @@ export const generatePath = (data: {
 
 export const getCurrentPath = () => request<Record<string, unknown>>("/api/path/current");
 export const getPaths = () => request<Record<string, unknown>[]>("/api/paths");
-export const deletePath = (id: string) =>
-  request(`/api/path/${id}`, { method: "DELETE" });
+export const deletePath = (id: string) => request(`/api/path/${id}`, { method: "DELETE" });
+
 export const getPreferences = () =>
-  request<{ activePathId: string | null; nativeLanguage: string }>("/api/preferences");
+  request<{ activePathId: string | null; nativeLanguage: string; difficultyBias: number }>(
+    "/api/preferences",
+  );
 export const updatePreferences = (data: {
   activePathId?: string | null;
   nativeLanguage?: string;
+  difficultyBias?: number;
 }) =>
-  request<{ activePathId: string | null; nativeLanguage: string }>("/api/preferences", {
-    method: "POST",
-    body: JSON.stringify(data),
-  });
+  request<{ activePathId: string | null; nativeLanguage: string; difficultyBias: number }>(
+    "/api/preferences",
+    { method: "POST", body: JSON.stringify(data) },
+  );
 
-// Exercises
+// ── Exercises ─────────────────────────────────────────────────────────────────
+
 export const generateExercise = (data: {
   language: string;
   level: string;
@@ -53,6 +91,31 @@ export const generateExercise = (data: {
   nativeLanguage?: string;
 }) =>
   request<Record<string, unknown>>("/api/exercises/generate", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+
+export const getNextExercise = (params: {
+  language: string;
+  topic: string;
+  level?: string;
+  nativeLanguage?: string;
+}) => {
+  const qs = new URLSearchParams({
+    language: params.language,
+    topic: params.topic,
+    level: params.level ?? "beginner",
+    nativeLanguage: params.nativeLanguage ?? "english",
+  });
+  return request<Record<string, unknown>>(`/api/exercises/next?${qs}`);
+};
+
+export const recordAnswer = (data: {
+  exerciseId: string;
+  correct: boolean;
+  quality?: number;
+}) =>
+  request<Record<string, unknown>>("/api/exercises/answer", {
     method: "POST",
     body: JSON.stringify(data),
   });
@@ -77,7 +140,17 @@ export const explainExercise = (data: {
     body: JSON.stringify(data),
   });
 
-// Correction
+export const submitFeedback = (data: {
+  rating: "too_easy" | "just_right" | "too_hard";
+  exerciseCount?: number;
+}) =>
+  request<{ ok: boolean; difficultyBias: number }>("/api/feedback", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+
+// ── Correction ────────────────────────────────────────────────────────────────
+
 export const correctText = (data: { text: string; language: string; context?: string }) =>
   request<Record<string, unknown>>("/api/correct", {
     method: "POST",
@@ -105,6 +178,8 @@ export const getExercises = (params?: {
   );
 };
 
+// ── Progress ──────────────────────────────────────────────────────────────────
+
 export type Progress = {
   pathId: string | null;
   currentModuleIndex: number;
@@ -119,12 +194,10 @@ export const getProgress = (pathId?: string) => {
 };
 
 export const saveProgress = (data: Partial<Progress>) =>
-  request<Progress>("/api/progress", {
-    method: "POST",
-    body: JSON.stringify(data),
-  });
+  request<Progress>("/api/progress", { method: "POST", body: JSON.stringify(data) });
 
-// Streak
+// ── Streak ────────────────────────────────────────────────────────────────────
+
 export const getStreak = () =>
   request<{ currentStreak: number; longestStreak: number; lastSessionDate: string | null }>(
     "/api/streak",
@@ -132,7 +205,8 @@ export const getStreak = () =>
 export const updateStreak = () =>
   request<Record<string, unknown>>("/api/streak/update", { method: "POST" });
 
-// Vocabulary
+// ── Vocabulary ────────────────────────────────────────────────────────────────
+
 export const getVocabulary = () => request<Record<string, unknown>[]>("/api/vocabulary");
 export const addVocabulary = (data: { word: string; meaning: string; language: string }) =>
   request<Record<string, unknown>>("/api/vocabulary", {
