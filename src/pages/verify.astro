@@ -1,0 +1,86 @@
+---
+// OAuth callback — receives ?jwt=<signed-token> from the API after Google OAuth
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Signing in... — LearnIt!</title>
+    <style>
+      body {
+        margin: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        font-family: sans-serif;
+        background: #0a0a0a;
+        color: #e5e5e5;
+      }
+      .container { text-align: center; }
+      .spinner {
+        width: 32px; height: 32px;
+        border: 2px solid #333;
+        border-top-color: #7c3aed;
+        border-radius: 50%;
+        animation: spin 0.7s linear infinite;
+        margin: 0 auto 16px;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      .error { color: #f87171; margin-top: 8px; font-size: 14px; }
+      .link { color: #7c3aed; text-decoration: none; }
+    </style>
+  </head>
+  <body>
+    <div class="container" id="root">
+      <div class="spinner"></div>
+      <p>Signing you in...</p>
+    </div>
+
+    <script>
+      function decodeJWTPayload(token: string): Record<string, unknown> {
+        const [, payload] = token.split(".");
+        return JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/")));
+      }
+
+      function showError(msg: string) {
+        const root = document.getElementById("root")!;
+        root.innerHTML = `
+          <p style="font-size:18px;margin-bottom:8px">Sign-in failed</p>
+          <p class="error">${msg}</p>
+          <p style="margin-top:16px;font-size:14px">
+            <a class="link" href="/">Go back</a>
+          </p>
+        `;
+      }
+
+      const params = new URLSearchParams(window.location.search);
+      const jwt = params.get("jwt");
+      const authError = params.get("auth_error");
+
+      if (authError) {
+        showError(
+          authError === "denied"
+            ? "Sign-in was cancelled."
+            : "Google sign-in failed. Please try again.",
+        );
+      } else if (!jwt) {
+        showError("No token found.");
+      } else {
+        try {
+          const payload = decodeJWTPayload(jwt);
+          localStorage.setItem("learnit_token", jwt);
+          localStorage.setItem(
+            "learnit_user",
+            JSON.stringify({ userId: payload.userId, email: payload.email }),
+          );
+          window.location.href = "/learn";
+        } catch {
+          showError("Invalid token. Please try signing in again.");
+        }
+      }
+    </script>
+  </body>
+</html>
