@@ -1,3 +1,43 @@
+// --- Calibration ---
+export const CALIBRATION_SYSTEM_PROMPT = `You are a language teacher creating a quick calibration quiz to assess a student's current level.
+Generate simple, unambiguous multiple-choice questions that test fundamental language knowledge.
+Each question must have exactly one unambiguously correct answer.
+Questions should cover a spread of basic topics so the result reflects real familiarity with the language.`;
+
+export function buildCalibrationPrompt(language: string, nativeLanguage = "english"): string {
+  const N = nativeLanguage;
+  return `Generate exactly 8 calibration questions to assess a student's ${language} level.
+
+Cover these topic areas (one question per area):
+1. Numbers (recognize a number 1–10)
+2. Basic greetings (hello / goodbye / thank you)
+3. Pronouns (I / you / he / she)
+4. Colors (a common color)
+5. Days of the week (a day name)
+6. Common nouns (family member or object)
+7. Basic verb (to be / to have in present tense)
+8. Simple sentence comprehension (pick the correct translation)
+
+Rules:
+- All ${language} content MUST be written in ${language} script/characters.
+- Instructions and option labels must be in ${N}.
+- Each question has 4 options, exactly one correct.
+- Questions should be easy if the student knows the basics — this is a calibration, not a hard test.
+
+Return ONLY valid JSON:
+{
+  "questions": [
+    {
+      "topic": "topic area name in ${N}",
+      "question": "the ${language} word, phrase, or sentence being tested",
+      "instruction": "short instruction in ${N} (e.g. 'What does this mean?', 'Which pronoun is correct?')",
+      "options": ["option in ${N}", "option in ${N}", "option in ${N}", "option in ${N}"],
+      "correctIndex": 0
+    }
+  ]
+}`;
+}
+
 // --- Path Generation ---
 export const PATH_SYSTEM_PROMPT = `You are an expert language teacher and curriculum designer.
 You create structured, progressive learning paths tailored to the student's specific goal.
@@ -14,15 +54,29 @@ Make the path realistic and achievable within the timeframe.
 Difficulty should ramp up gradually across modules.
 Focus on practical, usable language rather than academic theory.`;
 
+export type CalibrationLevel = "complete_beginner" | "some_basics" | "elementary" | "intermediate";
+
 export function buildPathPrompt(
   language: string,
   objective: string,
   timeframe: string,
   modules: number = 6,
+  startingLevel: CalibrationLevel = "complete_beginner",
 ): string {
+  const levelNotes: Record<CalibrationLevel, string> = {
+    complete_beginner: "The student is a complete beginner with no prior knowledge of ${language}. Start from absolute zero: alphabet/script, greetings, and basic vocabulary.",
+    some_basics: "The student knows a few words and phrases but lacks structure. Module 1 should be a brief review of fundamentals; the real learning starts at Module 2.",
+    elementary: "The student has elementary knowledge (greetings, numbers, basic vocabulary). Skip absolute-beginner content. Focus on building sentences and grammar from Module 1.",
+    intermediate: "The student has solid elementary foundations. Start directly with grammar patterns, expanded vocabulary, and practical conversational structures.",
+  };
+  const levelNote = levelNotes[startingLevel].replace(/\$\{language\}/g, language);
+
   return `Create a ${modules}-module learning path for a student learning ${language}.
 - Goal: ${objective}
 - Timeframe: ${timeframe}
+- Student level: ${startingLevel.replace(/_/g, " ")}
+
+Level guidance: ${levelNote}
 
 The path should teach ${language} specifically. Module names and topic names should reflect
 real ${language} language skills (e.g. "Basic ${language} Greetings", "Present tense verbs in ${language}").
@@ -64,22 +118,32 @@ Word: "${word}"
 Meaning: "${meaning}" (in ${nativeLanguage})
 Language: ${language}
 
-Instructions:
-- Identify the word type (verb, noun, adjective, adverb, phrase, etc.)
-- For VERBS: provide present tense conjugations for the main pronouns (4-6 forms max)
-- For NOUNS: provide article + singular, plural form, and grammatical gender if applicable
-- For ADJECTIVES: provide base, comparative, and superlative if the language has them
-- For PHRASES or other types: return "conjugations": []
-- Always provide a short, natural example sentence in ${language} and its ${nativeLanguage} translation
+Step 1 — Classify the word. Set "type" to exactly one of these strings:
+  "verb"      → action or state word (laufen, être, 食べる)
+  "noun"      → person, place, thing, concept (Hund, maison, 猫)
+  "adjective" → describes a noun (schnell, beau, 速い)
+  "adverb"    → modifies a verb or adjective (sehr, vite, とても)
+  "article"   → definite or indefinite article (der/die/das, el/la, le/la, il/la)
+  "phrase"    → multi-word expression (au revoir, por favor)
+  "other"     → only if none of the above fit (particles, conjunctions, prepositions)
 
-Return ONLY valid JSON:
+Step 2 — Fill "conjugations" with the most useful grammatical forms for the identified type:
+  verb      → present tense conjugations for main pronouns (4-6 forms) PLUS past participle and simple past (1st person) if the language has them. Form label in ${nativeLanguage}, value in ${language}.
+  noun      → article+word (if applicable), plural, and gender. E.g. [{"form":"singular","value":"der Hund"},{"form":"plural","value":"die Hunde"},{"form":"gender","value":"masculine"}]
+  adjective → base, comparative, superlative if the language has them.
+  article   → all gender/number forms of this article. E.g. for Spanish "el": [{"form":"masc. singular","value":"el"},{"form":"fem. singular","value":"la"},{"form":"masc. plural","value":"los"},{"form":"fem. plural","value":"las"}]. For German include nominative forms at minimum: [{"form":"masc.","value":"der"},{"form":"fem.","value":"die"},{"form":"neut.","value":"das"},{"form":"plural","value":"die"}]. Form labels in ${nativeLanguage}, values in ${language}.
+  adverb / phrase / other → return "conjugations": []
+
+Step 3 — Provide a short natural example sentence in ${language} and its ${nativeLanguage} translation.
+
+Return ONLY valid JSON (no extra keys, no markdown):
 {
-  "type": "verb|noun|adjective|adverb|phrase|other",
+  "type": "<verb|noun|adjective|adverb|article|phrase|other>",
   "conjugations": [
     { "form": "label in ${nativeLanguage}", "value": "form in ${language}" }
   ],
-  "example": "natural example sentence in ${language}",
-  "exampleTranslation": "translation of example in ${nativeLanguage}"
+  "example": "example sentence in ${language}",
+  "exampleTranslation": "translation in ${nativeLanguage}"
 }`;
 }
 
@@ -138,14 +202,31 @@ export type ExerciseType =
   | "conjugation"
   | "matching";
 
+export type WordMeaning = {
+  word: string;
+  infinitive: string;
+  meaning: string;
+};
+
 export function buildExercisePrompt(
   language: string,
   level: string,
   topic: string,
   type: ExerciseType,
   nativeLanguage = "english",
+  difficultyNote?: string,
 ): string {
   const N = nativeLanguage;
+
+  const wordMeaningsSchema = `"wordMeanings": [
+    {
+      "word": "exact form as it appears in the target-language text",
+      "infinitive": "dictionary/base form in ${language}",
+      "meaning": "meaning in ${N} for this context"
+    }
+  ]`;
+
+  const wordMeaningsNote = `For "wordMeanings": include 3–6 key vocabulary items (nouns, verbs, adjectives) from the target-language text shown to the student. Use the exact form as written in the text, plus the base/infinitive form, plus the contextual meaning in ${N}. Skip particles, articles, and trivial words unless they are the learning focus.`;
 
   const typeInstructions: Record<ExerciseType, string> = {
     multiple_choice: `Create a multiple choice question that tests ${language} knowledge.
@@ -153,54 +234,72 @@ The question and all options must be in ${language}.
 Return JSON:
 {
   "type": "multiple_choice",
+  "icon": "a single PascalCase Lucide icon name that best represents what this exercise is about (e.g. UtensilsCrossed, MapPin, Heart, Clock, Users)",
+  "context": "One sentence in ${N}: what real-life scenario this exercise represents AND what specific grammar/vocabulary concept it tests. E.g. 'Comparing two objects — tests German comparative adjectives (alt → älter)'",
   "instruction": "Choose the correct answer (write instruction in ${N})",
   "question": "the question text in ${language}",
   "options": ["A) option in ${language}", "B) option", "C) option", "D) option"],
   "correctIndex": 0,
-  "explanation": "Why this answer is correct (write explanation in ${N})"
-}`,
+  "explanation": "Why this answer is correct (write explanation in ${N})",
+  ${wordMeaningsSchema}
+}
+${wordMeaningsNote} Annotate words from the "question" field.`,
 
     fill_blank: `Create a fill-in-the-blank exercise using a ${language} sentence.
 The sentence must be in ${language} with ___ marking the blank.
 Return JSON:
 {
   "type": "fill_blank",
+  "icon": "a single PascalCase Lucide icon name that best represents what this exercise is about (e.g. UtensilsCrossed, MapPin, Heart, Clock, Users)",
+  "context": "One sentence in ${N}: what real-life scenario this exercise represents AND what specific grammar/vocabulary concept it tests. E.g. 'Describing your weekend plans — tests future tense formation'",
   "instruction": "Fill in the blank (write instruction in ${N})",
   "sentence": "A ${language} sentence with ___ where the blank goes",
   "correctAnswer": "the correct ${language} word or phrase",
   "hint": "optional hint written in ${N}",
-  "explanation": "Why this answer is correct (write explanation in ${N})"
-}`,
+  "explanation": "Why this answer is correct (write explanation in ${N})",
+  ${wordMeaningsSchema}
+}
+${wordMeaningsNote} Annotate words from the "sentence" field (exclude the ___ position itself).`,
 
     translation: `Create a translation exercise. The student translates a sentence from ${N} into ${language}.
 Return JSON:
 {
   "type": "translation",
+  "icon": "a single PascalCase Lucide icon name that best represents what this exercise is about (e.g. UtensilsCrossed, MapPin, Heart, Clock, Users)",
+  "context": "One sentence in ${N}: what real-life scenario this exercise represents AND what specific grammar/vocabulary concept it tests. E.g. 'Asking for directions on the street — tests question word order and modal verbs'",
   "instruction": "Translate this sentence into ${language} (write instruction in ${N})",
   "sourceText": "A ${N} sentence appropriate for ${level} level",
   "sourceLanguage": "${N}",
   "targetLanguage": "${language}",
   "direction": "${N}_to_${language}",
   "correctAnswer": "the correct ${language} translation",
-  "explanation": "Key grammar or vocabulary points (write in ${N})"
+  "explanation": "Key grammar or vocabulary points (write in ${N})",
+  "wordMeanings": []
 }`,
 
     conjugation: `Create a verb conjugation exercise for a ${language} verb.
 Return JSON:
 {
   "type": "conjugation",
+  "icon": "a single PascalCase Lucide icon name that best represents what this exercise is about (e.g. UtensilsCrossed, MapPin, Heart, Clock, Users)",
+  "context": "One sentence in ${N}: what real-life scenario this exercise represents AND what specific grammar/vocabulary concept it tests. E.g. 'Talking about daily habits — tests present tense conjugation of regular verbs'",
   "instruction": "Conjugate the verb (write instruction in ${N})",
   "verb": "the ${language} verb in its base/infinitive form",
   "tense": "the required tense/mood in ${language}",
   "pronoun": "the required pronoun in ${language} if applicable",
   "correctAnswer": "the correct ${language} conjugation",
-  "explanation": "Conjugation rule explanation (write in ${N})"
+  "explanation": "Conjugation rule explanation (write in ${N})",
+  "wordMeanings": [
+    { "word": "the verb as shown", "infinitive": "base form in ${language}", "meaning": "meaning in ${N}" }
+  ]
 }`,
 
     matching: `Create a matching exercise pairing ${language} words with their ${N} meanings.
 Return JSON:
 {
   "type": "matching",
+  "icon": "a single PascalCase Lucide icon name that best represents what this exercise is about (e.g. UtensilsCrossed, MapPin, Heart, Clock, Users)",
+  "context": "One sentence in ${N}: what real-life scenario this exercise represents AND what specific grammar/vocabulary concept it tests. E.g. 'Shopping for groceries — introduces common food nouns and their genders'",
   "instruction": "Match the ${language} words to their ${N} meanings (write instruction in ${N})",
   "pairs": [
     { "left": "${language} word", "right": "${N} meaning" },
@@ -208,15 +307,18 @@ Return JSON:
     { "left": "${language} word", "right": "${N} meaning" },
     { "left": "${language} word", "right": "${N} meaning" }
   ],
-  "explanation": "Brief notes on the vocabulary (write in ${N})"
+  "explanation": "Brief notes on the vocabulary (write in ${N})",
+  "wordMeanings": []
 }`,
   };
+
+  const difficultySection = difficultyNote ? `\nDIFFICULTY NOTE: ${difficultyNote}\n` : "";
 
   return `Generate a ${type} exercise for a student learning ${language}.
 - Level: ${level}
 - Topic: ${topic}
 - Target language: ${language} — all ${language} content MUST be written in ${language}.
 - Explanation language: ${N} — all instructions, hints, and explanations MUST be in ${N}.
-
+${difficultySection}
 ${typeInstructions[type]}`;
 }
