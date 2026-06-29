@@ -42,6 +42,14 @@ const PRIOR_EXPOSURES = [
   { value: "more", label: "Simple sentences and conversations" },
 ];
 
+type TargetLevel = "beginner" | "elementary" | "intermediate" | "advanced";
+
+function priorExposureToTargetLevel(priorExposure: string): TargetLevel {
+  if (priorExposure === "some") return "elementary";
+  if (priorExposure === "more") return "intermediate";
+  return "beginner";
+}
+
 function scoreToLevel(correct: number, total: number, priorExposure: string): CalibrationLevel {
   const pct = correct / total;
   if (priorExposure === "none" || pct < 0.25) return "complete_beginner";
@@ -88,15 +96,27 @@ export function CalibrationFlow({ language, nativeLanguage = "english", onComple
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [revealed, setRevealed] = useState(false);
   const [level, setLevel] = useState<CalibrationLevel | null>(null);
+  const [attempt, setAttempt] = useState(1);
 
   const projectionDone =
     projection.motivation && projection.dailyTime && projection.priorExposure;
 
-  const startQuiz = async () => {
+  const startQuiz = async (attemptNumber = 1) => {
     setLoadingQuiz(true);
+    const targetLevel = priorExposureToTargetLevel(projection.priorExposure ?? "none");
     try {
-      const data = await generateCalibrationQuestions({ language, nativeLanguage });
+      const data = await generateCalibrationQuestions({
+        language,
+        nativeLanguage,
+        targetLevel,
+        attempt: attemptNumber,
+      });
       setQuestions(data.questions);
+      setCurrentQ(0);
+      setAnswers([]);
+      setSelectedOption(null);
+      setRevealed(false);
+      setLevel(null);
       setStep("quiz");
     } catch {
       toast.error("Failed to generate calibration questions. Try again.");
@@ -181,7 +201,7 @@ export function CalibrationFlow({ language, nativeLanguage = "english", onComple
 
             <motion.div variants={itemVariants} className="flex gap-2 pt-1">
               <Button
-                onClick={startQuiz}
+                onClick={() => startQuiz(attempt)}
                 disabled={!projectionDone || loadingQuiz}
                 className="flex-1 gap-2"
               >
@@ -342,17 +362,15 @@ export function CalibrationFlow({ language, nativeLanguage = "english", onComple
               <Button
                 variant="ghost"
                 onClick={() => {
-                  setStep("quiz");
-                  setCurrentQ(0);
-                  setAnswers([]);
-                  setSelectedOption(null);
-                  setRevealed(false);
-                  setLevel(null);
+                  const next = attempt + 1;
+                  setAttempt(next);
+                  startQuiz(next);
                 }}
+                disabled={loadingQuiz}
                 className="text-muted-foreground gap-1.5 shrink-0"
-                title="Redo quiz"
+                title="Redo quiz with new questions"
               >
-                <RotateCcw size={13} />
+                {loadingQuiz ? <Loader2 size={13} className="animate-spin" /> : <RotateCcw size={13} />}
               </Button>
             </motion.div>
           </motion.div>

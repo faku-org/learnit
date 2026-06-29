@@ -376,7 +376,12 @@ const app = new Elysia()
   .post("/api/calibration/generate", async ({ body, headers, set }: any) => {
     const user = await requireUser(headers.authorization, set);
     if (!user) return { error: "Unauthorized" };
-    const { language, nativeLanguage = "english" } = body;
+    const {
+      language,
+      nativeLanguage = "english",
+      targetLevel = "beginner",
+      attempt = 1,
+    } = body;
     if (!language) {
       set.status = 400;
       return { error: "language is required" };
@@ -392,8 +397,8 @@ const app = new Elysia()
         }[];
       }>(
         CALIBRATION_SYSTEM_PROMPT,
-        buildCalibrationPrompt(language, nativeLanguage),
-        { temperature: 0.5, maxTokens: 2048 },
+        buildCalibrationPrompt(language, nativeLanguage, targetLevel, attempt),
+        { temperature: attempt > 1 ? 0.9 : 0.7, maxTokens: 2048 },
       );
       return result;
     } catch (err) {

@@ -43,6 +43,8 @@ export type CalibrationQuestion = {
 export const generateCalibrationQuestions = (data: {
   language: string;
   nativeLanguage?: string;
+  targetLevel?: "beginner" | "elementary" | "intermediate" | "advanced";
+  attempt?: number;
 }) =>
   request<{ questions: CalibrationQuestion[] }>("/api/calibration/generate", {
     method: "POST",

@@ -1,28 +1,81 @@
 // --- Calibration ---
-export const CALIBRATION_SYSTEM_PROMPT = `You are a language teacher creating a quick calibration quiz to assess a student's current level.
-Generate simple, unambiguous multiple-choice questions that test fundamental language knowledge.
+export const CALIBRATION_SYSTEM_PROMPT = `You are a language teacher creating a calibration quiz to assess a student's current level.
+Generate clear, unambiguous multiple-choice questions that test language knowledge appropriate for the specified level.
 Each question must have exactly one unambiguously correct answer.
-Questions should cover a spread of basic topics so the result reflects real familiarity with the language.`;
+Questions should cover a spread of topics so the result reflects real familiarity with the language.
+IMPORTANT: Never repeat questions or vocabulary items used in previous attempts — always generate fresh content.`;
 
-export function buildCalibrationPrompt(language: string, nativeLanguage = "english"): string {
+type CalibrationTargetLevel = "beginner" | "elementary" | "intermediate" | "advanced";
+
+const CALIBRATION_TOPICS: Record<CalibrationTargetLevel, string[]> = {
+  beginner: [
+    "Numbers 1–10 (recognize or translate a number)",
+    "Basic greetings (hello / goodbye / please / thank you)",
+    "Subject pronouns (I / you / he / she / we / they)",
+    "Colors (a common color word)",
+    "Days of the week (name a specific day)",
+    "Common nouns (family member, food item, or everyday object)",
+    "Basic verb 'to be' or 'to have' in present tense",
+    "Simple sentence comprehension (translate a 3–5 word phrase)",
+  ],
+  elementary: [
+    "Present tense verb conjugation (regular verb, any pronoun)",
+    "Definite and indefinite articles (gender agreement if applicable)",
+    "Basic adjective agreement (masculine/feminine or plural forms)",
+    "Common prepositions of place or time (in / on / at / from)",
+    "Question formation (how to ask 'where', 'when', or 'what')",
+    "Negation (how to say 'not' or form a negative sentence)",
+    "Common everyday vocabulary in context (food, transport, or routines)",
+    "Short dialogue comprehension (choose what a speaker means)",
+  ],
+  intermediate: [
+    "Past tense usage (preterite vs imperfect, or simple past vs past continuous)",
+    "Future or conditional tense (expressing plans or hypotheticals)",
+    "Reflexive or modal verbs in context",
+    "Relative clauses or subordinate clauses (who, which, that)",
+    "Formal vs informal register (choose the appropriate form)",
+    "Phrasal expressions or idiomatic phrases",
+    "Reading comprehension — infer meaning from a short paragraph",
+    "Complex sentence structure or word order rule",
+  ],
+  advanced: [
+    "Subjunctive or conjunctive mood (trigger conditions and correct form)",
+    "Passive voice construction",
+    "Advanced idiomatic or colloquial expressions",
+    "Nuance between near-synonyms (subtle meaning differences)",
+    "Discourse connectors and cohesion (however / although / given that)",
+    "Register and style — formal writing vs spoken register",
+    "Complex reading comprehension — main idea of an authentic-level passage",
+    "Advanced grammar edge case (irregular agreement, aspect, or case usage)",
+  ],
+};
+
+export function buildCalibrationPrompt(
+  language: string,
+  nativeLanguage = "english",
+  targetLevel: CalibrationTargetLevel = "beginner",
+  attempt = 1,
+): string {
   const N = nativeLanguage;
-  return `Generate exactly 8 calibration questions to assess a student's ${language} level.
+  const topics = CALIBRATION_TOPICS[targetLevel];
+  const topicList = topics.map((t, i) => `${i + 1}. ${t}`).join("\n");
+  const attemptNote =
+    attempt > 1
+      ? `\nThis is recalibration attempt #${attempt}. You MUST use completely different words, sentences, and examples than previous attempts. Vary the specific items tested within each topic.`
+      : "";
 
-Cover these topic areas (one question per area):
-1. Numbers (recognize a number 1–10)
-2. Basic greetings (hello / goodbye / thank you)
-3. Pronouns (I / you / he / she)
-4. Colors (a common color)
-5. Days of the week (a day name)
-6. Common nouns (family member or object)
-7. Basic verb (to be / to have in present tense)
-8. Simple sentence comprehension (pick the correct translation)
+  return `Generate exactly 8 calibration questions to assess a student's ${language} level.
+Target level being probed: ${targetLevel}.${attemptNote}
+
+Cover these topic areas in order (one question per area):
+${topicList}
 
 Rules:
 - All ${language} content MUST be written in ${language} script/characters.
 - Instructions and option labels must be in ${N}.
 - Each question has 4 options, exactly one correct.
-- Questions should be easy if the student knows the basics — this is a calibration, not a hard test.
+- Difficulty should match the "${targetLevel}" level — not easier, not harder.
+- Pick specific, concrete items to test (e.g. a specific verb, a specific noun) — do not test the same word twice.
 
 Return ONLY valid JSON:
 {
