@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Target, ArrowRight, Loader2, Check, Trash2, Plus, ChevronLeft } from "lucide-react";
+import { Target, ArrowRight, Loader2, Check, Trash2, Plus, ChevronLeft, Sparkles } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,7 +20,13 @@ const itemVariants = {
 };
 
 type Topic = { name: string; order: number; description: string };
-type PathModule = { name: string; description: string; order: number; topics?: Topic[] };
+type PathModule = {
+  name: string;
+  description: string;
+  focus?: string;
+  order: number;
+  topics?: Topic[];
+};
 type LearningPath = {
   _id: string;
   language: string;
@@ -30,7 +36,7 @@ type LearningPath = {
   active?: boolean;
 };
 
-export function GoalsPage() {
+function GoalsInner() {
   const [language, setLanguage] = useState("");
   const [objective, setObjective] = useState("");
   const [timeframe, setTimeframe] = useState("6 months");
@@ -98,7 +104,9 @@ export function GoalsPage() {
     setShowCalibration(false);
     setGenerating(true);
     try {
-      const path = await generatePath({ language, objective, timeframe, modules: 6, startingLevel });
+      // Only the outline and module 1 are written now; later modules are generated
+      // from real performance, so the path can be longer without hitting output limits.
+      const path = await generatePath({ language, objective, timeframe, modules: 10, startingLevel });
       const generated = path as unknown as LearningPath;
       await updatePreferences({ activePathId: generated._id });
       setActivePathId(generated._id);
@@ -117,7 +125,6 @@ export function GoalsPage() {
   };
 
   return (
-    <AuthGuard>
     <motion.div
       variants={containerVariants}
       initial="hidden"
@@ -350,7 +357,7 @@ export function GoalsPage() {
               </CardHeader>
               <CardContent>
                 <p className="text-xs text-muted-foreground mb-3">{mod.description}</p>
-                {mod.topics && (
+                {mod.topics && mod.topics.length > 0 ? (
                   <div className="space-y-1">
                     {mod.topics.map((topic, j) => (
                       <div key={j} className="text-xs flex items-center gap-2">
@@ -359,6 +366,14 @@ export function GoalsPage() {
                       </div>
                     ))}
                   </div>
+                ) : (
+                  <div className="text-xs flex items-center gap-2 text-muted-foreground/70">
+                    <Sparkles size={11} className="text-accent/60 shrink-0" />
+                    <span>
+                      {mod.focus ? `${mod.focus} — ` : ""}lessons written when you get here,
+                      based on how you're doing
+                    </span>
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -366,6 +381,15 @@ export function GoalsPage() {
         </motion.div>
       )}
     </motion.div>
+  );
+}
+
+// Zero-hook shell: AuthGuard must gate mounting of GoalsInner, not just its
+// output, or the fetch effects below fire (and 401) before auth is known.
+export function GoalsPage() {
+  return (
+    <AuthGuard>
+      <GoalsInner />
     </AuthGuard>
   );
 }

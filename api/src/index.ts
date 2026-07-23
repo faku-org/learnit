@@ -6,8 +6,10 @@ import { connectDB, getDB } from "./db";
 import { GoalSchema, VocabularySchema, PreferencesSchema } from "./schemas";
 import { generateJSON, validateExercise, PRO_MODEL } from "./llm";
 import {
-  PATH_SYSTEM_PROMPT,
-  buildPathPrompt,
+  PATH_OUTLINE_SYSTEM_PROMPT,
+  buildPathOutlinePrompt,
+  MODULE_TOPICS_SYSTEM_PROMPT,
+  buildModuleTopicsPrompt,
   EXERCISE_SYSTEM_PROMPT,
   buildExercisePrompt,
   EXPLAIN_SYSTEM_PROMPT,
@@ -15,9 +17,12 @@ import {
   VOCAB_ENRICH_SYSTEM_PROMPT,
   buildVocabEnrichPrompt,
   CALIBRATION_SYSTEM_PROMPT,
-  buildCalibrationPrompt,
+  buildCalibrationStagePrompt,
+  CALIBRATION_STAGE_SIZE,
   type ExerciseType,
   type CalibrationLevel,
+  type CalibrationProbeLevel,
+  type ModulePerformance,
 } from "./prompts";
 import {
   signJWT,
@@ -86,6 +91,74 @@ function pickNextType(recentTypes: string[]): ExerciseType {
   for (const t of EXERCISE_TYPES) counts[t] = 0;
   for (const t of recentTypes) if (t in counts) counts[t]++;
   return EXERCISE_TYPES.reduce((a, b) => (counts[a] <= counts[b] ? a : b));
+}
+
+// ── Segmented path generation ─────────────────────────────────────────────────
+
+type PathTopic = { name: string; order: number; description?: string };
+type PathModule = {
+  name: string;
+  description?: string;
+  focus?: string;
+  order: number;
+  topics?: PathTopic[];
+};
+type StoredPath = {
+  language: string;
+  objective: string;
+  startingLevel?: CalibrationLevel;
+  modules: PathModule[];
+};
+
+type TopicStats = Record<string, { total: number; correct: number }>;
+
+/** Collapse every recorded answer into a single accuracy signal for the topic generator. */
+function aggregatePerformance(topicStats: TopicStats | undefined): ModulePerformance | null {
+  if (!topicStats) return null;
+  let total = 0;
+  let correct = 0;
+  for (const stat of Object.values(topicStats)) {
+    total += stat?.total ?? 0;
+    correct += stat?.correct ?? 0;
+  }
+  if (total === 0) return null;
+  return { accuracy: correct / total, answered: total };
+}
+
+/** Generate the topics for a single module of an already-outlined path. */
+async function generateModuleTopics(
+  path: StoredPath,
+  order: number,
+  performance: ModulePerformance | null,
+): Promise<PathTopic[]> {
+  const idx = order - 1;
+  const module = path.modules[idx];
+  const { topics } = await generateJSON<{ topics: PathTopic[] }>(
+    MODULE_TOPICS_SYSTEM_PROMPT,
+    buildModuleTopicsPrompt({
+      language: path.language,
+      objective: path.objective,
+      startingLevel: path.startingLevel ?? "complete_beginner",
+      module: {
+        name: module.name,
+        description: module.description,
+        focus: module.focus,
+        order,
+      },
+      previousModules: path.modules.slice(0, idx).map((m) => m.name),
+      nextModule: path.modules[idx + 1]?.name ?? null,
+      coveredTopics: path.modules
+        .slice(0, idx)
+        .flatMap((m) => (m.topics ?? []).map((t) => t.name)),
+      performance,
+    }),
+    { temperature: 0.7, maxTokens: 2048 },
+  );
+  return topics.map((t, i) => ({
+    name: t.name,
+    order: t.order ?? i + 1,
+    description: t.description,
+  }));
 }
 
 // ── Auth helper ───────────────────────────────────────────────────────────────
@@ -373,14 +446,18 @@ const app = new Elysia()
   // Calibration + Path (user-scoped)
   // ═══════════════════════════════════════════════════════════════════════════
 
-  .post("/api/calibration/generate", async ({ body, headers, set }: any) => {
+  // One stage of the adaptive placement test. The client drives the difficulty
+  // ladder and calls this repeatedly with an updated probeLevel.
+  .post("/api/calibration/stage", async ({ body, headers, set }: any) => {
     const user = await requireUser(headers.authorization, set);
     if (!user) return { error: "Unauthorized" };
     const {
       language,
       nativeLanguage = "english",
-      targetLevel = "beginner",
-      attempt = 1,
+      probeLevel = "beginner",
+      stage = 1,
+      usedTopics = [],
+      askedQuestions = [],
     } = body;
     if (!language) {
       set.status = 400;
@@ -397,17 +474,35 @@ const app = new Elysia()
         }[];
       }>(
         CALIBRATION_SYSTEM_PROMPT,
-        buildCalibrationPrompt(language, nativeLanguage, targetLevel, attempt),
-        { temperature: attempt > 1 ? 0.9 : 0.7, maxTokens: 2048 },
+        buildCalibrationStagePrompt({
+          language,
+          nativeLanguage,
+          probeLevel: probeLevel as CalibrationProbeLevel,
+          stage,
+          usedTopics,
+          askedQuestions,
+        }),
+        // deepseek-v4-flash is a reasoning model: hidden reasoning_tokens are
+        // deducted from this same budget before any visible content is written,
+        // and that spend is highly variable (observed 400-1800+ tokens across
+        // identical prompts). A tight budget can exhaust it before content
+        // starts, returning an empty completion ("Unexpected EOF" on parse).
+        { temperature: 0.9, maxTokens: 4096 },
       );
-      return result;
+      return {
+        probeLevel,
+        stage,
+        questions: result.questions.slice(0, CALIBRATION_STAGE_SIZE),
+      };
     } catch (err) {
       set.status = 500;
       return { error: "Calibration generation failed", detail: String(err) };
     }
   })
 
-  // Path generation uses PRO_MODEL for higher quality
+  // Path generation is segmented: PRO_MODEL writes the module outline (cheap
+  // enough for a long path in one call), then module 1's topics are filled in.
+  // Later modules are filled in on demand from real performance.
   .post("/api/path/generate", async ({ body, headers, set }: any) => {
     const user = await requireUser(headers.authorization, set);
     if (!user) return { error: "Unauthorized" };
@@ -415,7 +510,7 @@ const app = new Elysia()
       language,
       objective,
       timeframe,
-      modules = 6,
+      modules = 10,
       startingLevel = "complete_beginner",
     } = body;
     if (!language || !objective) {
@@ -423,24 +518,49 @@ const app = new Elysia()
       return { error: "language and objective are required" };
     }
     try {
-      const path = await generateJSON<{ modules: unknown[] }>(
-        PATH_SYSTEM_PROMPT,
-        buildPathPrompt(
+      const outline = await generateJSON<{ modules: PathModule[] }>(
+        PATH_OUTLINE_SYSTEM_PROMPT,
+        buildPathOutlinePrompt(
           language,
           objective,
           timeframe ?? "",
           modules,
           startingLevel as CalibrationLevel,
         ),
-        { temperature: 0.7, maxTokens: 6000, model: PRO_MODEL },
+        { temperature: 0.7, maxTokens: 3000, model: PRO_MODEL },
       );
+
+      const normalized: PathModule[] = outline.modules.map((m, i) => ({
+        name: m.name,
+        description: m.description,
+        focus: m.focus,
+        order: m.order ?? i + 1,
+      }));
+      if (normalized.length === 0) {
+        set.status = 500;
+        return { error: "Outline generation produced no modules" };
+      }
+
+      const draft: StoredPath = {
+        language,
+        objective,
+        startingLevel: startingLevel as CalibrationLevel,
+        modules: normalized,
+      };
+      // Module 1 has no performance history yet, so it is pitched purely off the
+      // calibration result. Failure here is non-fatal — it can be hydrated later.
+      try {
+        normalized[0].topics = await generateModuleTopics(draft, 1, null);
+      } catch { /* left unhydrated */ }
+
       const db = await getDB();
       const doc = {
         userId: user.userId,
         language,
         objective,
         timeframe: timeframe ?? null,
-        modules: path.modules,
+        startingLevel,
+        modules: normalized,
         createdAt: new Date().toISOString(),
       };
       const result = await db.collection("paths").insertOne(doc);
@@ -448,6 +568,59 @@ const app = new Elysia()
     } catch (err) {
       set.status = 500;
       return { error: "LLM generation failed", detail: String(err) };
+    }
+  })
+
+  // Fill in the topics of one outlined module, adapting to performance so far.
+  // Idempotent: an already-hydrated module is returned untouched.
+  .post("/api/path/:id/module/:order/topics", async ({ params, headers, set }: any) => {
+    const user = await requireUser(headers.authorization, set);
+    if (!user) return { error: "Unauthorized" };
+    const order = Number(params.order);
+    if (!Number.isInteger(order) || order < 1) {
+      set.status = 400;
+      return { error: "order must be a positive integer" };
+    }
+    const db = await getDB();
+    let path: (StoredPath & { _id: ObjectId }) | null = null;
+    try {
+      const found = await db
+        .collection("paths")
+        .findOne({ _id: new ObjectId(params.id), userId: user.userId });
+      path = found as unknown as (StoredPath & { _id: ObjectId }) | null;
+    } catch { /* invalid id */ }
+    if (!path) {
+      set.status = 404;
+      return { error: "Path not found" };
+    }
+
+    const idx = order - 1;
+    const module = path.modules[idx];
+    if (!module) {
+      set.status = 404;
+      return { error: "Module not found" };
+    }
+    if (module.topics && module.topics.length > 0) {
+      return { order, topics: module.topics, cached: true };
+    }
+
+    try {
+      const progress = await db.collection("progress").findOne({ userId: user.userId });
+      const performance =
+        progress && progress.pathId === params.id
+          ? aggregatePerformance(progress.topicStats as TopicStats | undefined)
+          : null;
+      const topics = await generateModuleTopics(path, order, performance);
+      await db
+        .collection("paths")
+        .updateOne(
+          { _id: path._id, userId: user.userId },
+          { $set: { [`modules.${idx}.topics`]: topics } },
+        );
+      return { order, topics, cached: false };
+    } catch (err) {
+      set.status = 500;
+      return { error: "Module topic generation failed", detail: String(err) };
     }
   })
 

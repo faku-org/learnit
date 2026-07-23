@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { Mic, MicOff, Volume2, RefreshCw, Check, X } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { AuthGuard } from "@/components/AuthGuard";
 
 const SAMPLE_PHRASES: Record<string, string[]> = {
   japanese: [
@@ -67,7 +68,7 @@ interface SRInstance {
 }
 type SpeechRecognitionCtor = new () => SRInstance;
 
-export function SpeakPage() {
+function SpeakInner() {
   const [language, setLanguage] = useState("japanese");
   const [phrase, setPhrase] = useState("");
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -325,5 +326,15 @@ export function SpeakPage() {
         </motion.div>
       </AnimatePresence>
     </motion.div>
+  );
+}
+
+// Zero-hook shell: AuthGuard must gate mounting of SpeakInner, not just its
+// output, or the fetch effects below fire (and 401) before auth is known.
+export function SpeakPage() {
+  return (
+    <AuthGuard>
+      <SpeakInner />
+    </AuthGuard>
   );
 }

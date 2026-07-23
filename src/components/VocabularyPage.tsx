@@ -13,6 +13,7 @@ import {
   getPreferences,
 } from "@/lib/api";
 import { toast } from "sonner";
+import { AuthGuard } from "@/components/AuthGuard";
 
 const containerVariants = {
   hidden: {},
@@ -37,7 +38,7 @@ type VocabEntry = {
   createdAt: string;
 };
 
-export function VocabularyPage() {
+function VocabularyInner() {
   const [entries, setEntries] = useState<VocabEntry[]>([]);
   const [word, setWord] = useState("");
   const [meaning, setMeaning] = useState("");
@@ -336,5 +337,15 @@ export function VocabularyPage() {
         </AnimatePresence>
       </motion.div>
     </motion.div>
+  );
+}
+
+// Zero-hook shell: AuthGuard must gate mounting of VocabularyInner, not just its
+// output, or the fetch effects below fire (and 401) before auth is known.
+export function VocabularyPage() {
+  return (
+    <AuthGuard>
+      <VocabularyInner />
+    </AuthGuard>
   );
 }

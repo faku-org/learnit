@@ -1,81 +1,156 @@
 // --- Calibration ---
-export const CALIBRATION_SYSTEM_PROMPT = `You are a language teacher creating a calibration quiz to assess a student's current level.
-Generate clear, unambiguous multiple-choice questions that test language knowledge appropriate for the specified level.
-Each question must have exactly one unambiguously correct answer.
-Questions should cover a spread of topics so the result reflects real familiarity with the language.
-IMPORTANT: Never repeat questions or vocabulary items used in previous attempts — always generate fresh content.`;
+export const CALIBRATION_SYSTEM_PROMPT = `You are a language teacher running an adaptive placement test.
+You generate one short stage of the test at a time, at the exact difficulty level requested.
+Each question must have exactly one unambiguously correct answer and no trick wording.
+Calibrate strictly to the requested level: an "elementary" stage must not contain "intermediate" content, and vice versa.
+Never reuse a word, phrase, or sentence that has already been tested in this session.`;
 
-type CalibrationTargetLevel = "beginner" | "elementary" | "intermediate" | "advanced";
+export type CalibrationProbeLevel = "beginner" | "elementary" | "intermediate" | "advanced";
 
-const CALIBRATION_TOPICS: Record<CalibrationTargetLevel, string[]> = {
+export const CALIBRATION_PROBE_LEVELS: CalibrationProbeLevel[] = [
+  "beginner",
+  "elementary",
+  "intermediate",
+  "advanced",
+];
+
+/** Questions per adaptive stage. */
+export const CALIBRATION_STAGE_SIZE = 4;
+/** Hard ceiling on stages so a session always terminates. */
+export const CALIBRATION_MAX_STAGES = 3;
+
+const CALIBRATION_TOPICS: Record<CalibrationProbeLevel, string[]> = {
   beginner: [
-    "Numbers 1–10 (recognize or translate a number)",
-    "Basic greetings (hello / goodbye / please / thank you)",
+    "Numbers 1–10 (recognize a number)",
+    "Numbers 11–100 (recognize a number)",
+    "Basic greetings (hello / goodbye / good morning)",
+    "Courtesy words (please / thank you / sorry / excuse me)",
     "Subject pronouns (I / you / he / she / we / they)",
     "Colors (a common color word)",
     "Days of the week (name a specific day)",
-    "Common nouns (family member, food item, or everyday object)",
-    "Basic verb 'to be' or 'to have' in present tense",
-    "Simple sentence comprehension (translate a 3–5 word phrase)",
+    "Months or seasons (name a specific one)",
+    "Family members (mother / brother / grandparent)",
+    "Food and drink nouns (a common everyday item)",
+    "Everyday objects (house, book, car, water)",
+    "Body parts or clothing (a common item)",
+    "Verb 'to be' in present tense",
+    "Verb 'to have' in present tense",
+    "Simple sentence comprehension (understand a 3–5 word phrase)",
+    "Yes/no and basic question words (what / where)",
   ],
   elementary: [
-    "Present tense verb conjugation (regular verb, any pronoun)",
-    "Definite and indefinite articles (gender agreement if applicable)",
-    "Basic adjective agreement (masculine/feminine or plural forms)",
-    "Common prepositions of place or time (in / on / at / from)",
-    "Question formation (how to ask 'where', 'when', or 'what')",
-    "Negation (how to say 'not' or form a negative sentence)",
-    "Common everyday vocabulary in context (food, transport, or routines)",
-    "Short dialogue comprehension (choose what a speaker means)",
+    "Present tense conjugation of a regular verb",
+    "Present tense conjugation of a common irregular verb",
+    "Definite articles (gender agreement if applicable)",
+    "Indefinite articles (gender agreement if applicable)",
+    "Adjective agreement (masculine/feminine forms)",
+    "Adjective agreement (singular/plural forms)",
+    "Plural noun formation",
+    "Prepositions of place (in / on / under / next to)",
+    "Prepositions of time (at / on / in / from … to)",
+    "Question formation (where / when / why / how)",
+    "Negation (forming a negative sentence)",
+    "Possessives (my / your / his / her)",
+    "Telling the time or stating a date",
+    "Everyday vocabulary in context (food, transport, routines)",
+    "Short dialogue comprehension (what does the speaker mean)",
+    "Basic word order in a statement",
   ],
   intermediate: [
-    "Past tense usage (preterite vs imperfect, or simple past vs past continuous)",
-    "Future or conditional tense (expressing plans or hypotheticals)",
-    "Reflexive or modal verbs in context",
-    "Relative clauses or subordinate clauses (who, which, that)",
+    "Past tense — perfective vs imperfective aspect (or simple past vs continuous)",
+    "Past tense conjugation of an irregular verb",
+    "Future tense (expressing plans or predictions)",
+    "Conditional mood (expressing hypotheticals)",
+    "Reflexive verbs in context",
+    "Modal verbs (must / can / should) in context",
+    "Relative clauses (who / which / that)",
+    "Subordinate clauses and conjunctions (because / when / if)",
     "Formal vs informal register (choose the appropriate form)",
-    "Phrasal expressions or idiomatic phrases",
+    "Common phrasal or idiomatic expressions",
+    "Comparatives and superlatives",
+    "Object pronouns (direct and indirect)",
     "Reading comprehension — infer meaning from a short paragraph",
-    "Complex sentence structure or word order rule",
+    "Word order in complex sentences",
+    "Imperative mood (giving instructions)",
+    "Quantifiers and indefinite pronouns (some / any / none / each)",
   ],
   advanced: [
-    "Subjunctive or conjunctive mood (trigger conditions and correct form)",
+    "Subjunctive or conjunctive mood — trigger conditions and correct form",
+    "Subjunctive or conjunctive mood — past or imperfect form",
     "Passive voice construction",
+    "Reported (indirect) speech",
     "Advanced idiomatic or colloquial expressions",
     "Nuance between near-synonyms (subtle meaning differences)",
     "Discourse connectors and cohesion (however / although / given that)",
     "Register and style — formal writing vs spoken register",
     "Complex reading comprehension — main idea of an authentic-level passage",
-    "Advanced grammar edge case (irregular agreement, aspect, or case usage)",
+    "Inference and tone — what the writer implies but does not state",
+    "Irregular agreement or case usage edge case",
+    "Aspect, mood, or tense sequencing in a multi-clause sentence",
+    "Verb–preposition collocations",
+    "Nominalization and abstract vocabulary",
+    "Set phrases and fixed expressions with non-literal meaning",
   ],
 };
 
-export function buildCalibrationPrompt(
-  language: string,
+/** Fisher–Yates on a copy — sampling happens server-side so variety never depends on the model. */
+function sample<T>(pool: T[], n: number): T[] {
+  const copy = [...pool];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy.slice(0, n);
+}
+
+export type CalibrationStageParams = {
+  language: string;
+  nativeLanguage?: string;
+  probeLevel: CalibrationProbeLevel;
+  stage: number;
+  /** Topic areas already used in this session, so stages never overlap. */
+  usedTopics?: string[];
+  /** Question texts already shown, so items are never repeated. */
+  askedQuestions?: string[];
+};
+
+export function buildCalibrationStagePrompt({
+  language,
   nativeLanguage = "english",
-  targetLevel: CalibrationTargetLevel = "beginner",
-  attempt = 1,
-): string {
+  probeLevel,
+  stage,
+  usedTopics = [],
+  askedQuestions = [],
+}: CalibrationStageParams): string {
   const N = nativeLanguage;
-  const topics = CALIBRATION_TOPICS[targetLevel];
-  const topicList = topics.map((t, i) => `${i + 1}. ${t}`).join("\n");
-  const attemptNote =
-    attempt > 1
-      ? `\nThis is recalibration attempt #${attempt}. You MUST use completely different words, sentences, and examples than previous attempts. Vary the specific items tested within each topic.`
+  const pool = CALIBRATION_TOPICS[probeLevel];
+  const used = new Set(usedTopics);
+  const available = pool.filter((t) => !used.has(t));
+  const chosen = sample(available.length >= CALIBRATION_STAGE_SIZE ? available : pool, CALIBRATION_STAGE_SIZE);
+  const topicList = chosen.map((t, i) => `${i + 1}. ${t}`).join("\n");
+
+  const exclusion =
+    askedQuestions.length > 0
+      ? `\nAlready tested in this session — do NOT reuse any of these items or close variants:\n${askedQuestions
+          .map((q) => `- ${q}`)
+          .join("\n")}\n`
       : "";
 
-  return `Generate exactly 8 calibration questions to assess a student's ${language} level.
-Target level being probed: ${targetLevel}.${attemptNote}
-
-Cover these topic areas in order (one question per area):
+  return `Generate stage ${stage} of an adaptive ${language} placement test: exactly ${CALIBRATION_STAGE_SIZE} questions.
+Difficulty for this stage: ${probeLevel}. Every question must sit squarely at that level.
+${exclusion}
+Cover these topic areas, one question each, in order:
 ${topicList}
 
 Rules:
-- All ${language} content MUST be written in ${language} script/characters.
-- Instructions and option labels must be in ${N}.
+- The "topic" and "instruction" fields are meta-guidance for the student and go in ${N}.
+- Everything else — "question" AND all 4 "options" — MUST be entirely in ${language}, written in
+  ${language} script/characters. This applies even to meaning/comprehension questions: instead of
+  translating to ${N}, phrase them as "What does this mean?" with 4 ${language} synonyms or
+  definitions as options (one correct, 3 plausible distractors), never a ${N} translation.
 - Each question has 4 options, exactly one correct.
-- Difficulty should match the "${targetLevel}" level — not easier, not harder.
-- Pick specific, concrete items to test (e.g. a specific verb, a specific noun) — do not test the same word twice.
+- The 3 wrong options must be plausible at this level, not obviously absurd.
+- Pick specific, concrete items to test — do not test the same word twice.
 
 Return ONLY valid JSON:
 {
@@ -84,7 +159,7 @@ Return ONLY valid JSON:
       "topic": "topic area name in ${N}",
       "question": "the ${language} word, phrase, or sentence being tested",
       "instruction": "short instruction in ${N} (e.g. 'What does this mean?', 'Which pronoun is correct?')",
-      "options": ["option in ${N}", "option in ${N}", "option in ${N}", "option in ${N}"],
+      "options": ["option in ${language}", "option in ${language}", "option in ${language}", "option in ${language}"],
       "correctIndex": 0
     }
   ]
@@ -92,49 +167,49 @@ Return ONLY valid JSON:
 }
 
 // --- Path Generation ---
-export const PATH_SYSTEM_PROMPT = `You are an expert language teacher and curriculum designer.
-You create structured, progressive learning paths tailored to the student's specific goal.
-
-For each module, provide:
-- A clear name describing the theme (in English, for navigation)
-- A description of what the student will learn (in English)
-- 3-5 specific topics, each with:
-  - name: the specific skill/concept (in English)
-  - order: numeric order within the module
-  - description: what this topic covers (in English)
-
-Make the path realistic and achievable within the timeframe.
-Difficulty should ramp up gradually across modules.
-Focus on practical, usable language rather than academic theory.`;
-
 export type CalibrationLevel = "complete_beginner" | "some_basics" | "elementary" | "intermediate";
 
-export function buildPathPrompt(
+const LEVEL_NOTES: Record<CalibrationLevel, string> = {
+  complete_beginner:
+    "The student is a complete beginner with no prior knowledge of {language}. Start from absolute zero: alphabet/script, greetings, and basic vocabulary.",
+  some_basics:
+    "The student knows a few words and phrases but lacks structure. Module 1 should be a brief review of fundamentals; the real learning starts at Module 2.",
+  elementary:
+    "The student has elementary knowledge (greetings, numbers, basic vocabulary). Skip absolute-beginner content. Focus on building sentences and grammar from Module 1.",
+  intermediate:
+    "The student has solid elementary foundations. Start directly with grammar patterns, expanded vocabulary, and practical conversational structures.",
+};
+
+function levelNote(startingLevel: CalibrationLevel, language: string): string {
+  return LEVEL_NOTES[startingLevel].replace(/\{language\}/g, language);
+}
+
+// Stage 1: the outline. Headers only — cheap enough to cover a long path in one call.
+export const PATH_OUTLINE_SYSTEM_PROMPT = `You are an expert language teacher and curriculum designer.
+You design the high-level arc of a learning path: an ordered list of modules, each with a name, a short description, and a one-line focus.
+Do NOT write individual lesson topics — those are designed later, once the student's real performance is known.
+Difficulty must ramp gradually and every module must build on the ones before it.
+Focus on practical, usable language rather than academic theory.`;
+
+export function buildPathOutlinePrompt(
   language: string,
   objective: string,
   timeframe: string,
-  modules: number = 6,
-  startingLevel: CalibrationLevel = "complete_beginner",
+  moduleCount: number,
+  startingLevel: CalibrationLevel,
 ): string {
-  const levelNotes: Record<CalibrationLevel, string> = {
-    complete_beginner: "The student is a complete beginner with no prior knowledge of ${language}. Start from absolute zero: alphabet/script, greetings, and basic vocabulary.",
-    some_basics: "The student knows a few words and phrases but lacks structure. Module 1 should be a brief review of fundamentals; the real learning starts at Module 2.",
-    elementary: "The student has elementary knowledge (greetings, numbers, basic vocabulary). Skip absolute-beginner content. Focus on building sentences and grammar from Module 1.",
-    intermediate: "The student has solid elementary foundations. Start directly with grammar patterns, expanded vocabulary, and practical conversational structures.",
-  };
-  const levelNote = levelNotes[startingLevel].replace(/\$\{language\}/g, language);
-
-  return `Create a ${modules}-module learning path for a student learning ${language}.
+  return `Design the module outline for a ${language} learning path.
 - Goal: ${objective}
 - Timeframe: ${timeframe}
 - Student level: ${startingLevel.replace(/_/g, " ")}
+- Number of modules: exactly ${moduleCount}
 
-Level guidance: ${levelNote}
+Level guidance: ${levelNote(startingLevel, language)}
 
-The path should teach ${language} specifically. Module names and topic names should reflect
-real ${language} language skills (e.g. "Basic ${language} Greetings", "Present tense verbs in ${language}").
+Module names must reflect real ${language} skills (e.g. "Basic ${language} Greetings", "Present Tense Verbs in ${language}").
+The arc should carry the student from their current level all the way to the stated goal across ${moduleCount} modules.
 
-Return JSON in this exact format:
+Return ONLY valid JSON:
 {
   "language": "${language}",
   "objective": "${objective}",
@@ -142,15 +217,107 @@ Return JSON in this exact format:
   "modules": [
     {
       "name": "Module name",
-      "description": "What this module covers",
+      "description": "What this module covers, in one or two sentences",
+      "focus": "The single core skill this module builds, in a few words",
+      "order": 1
+    }
+  ]
+}`;
+}
+
+// Stage 2: topics for one module, generated on demand from actual performance.
+export const MODULE_TOPICS_SYSTEM_PROMPT = `You are an expert language teacher designing the lessons inside a single module of a learning path.
+You are given the module's theme, what the student has already covered, and how they have actually been performing.
+Adapt: if the student is struggling, slow the ramp and reinforce; if they are breezing through, raise the ceiling and add depth.
+Each topic must be a specific, teachable skill — not a vague theme.`;
+
+export type ModulePerformance = {
+  /** Fraction of exercises answered correctly across prior modules, 0–1. */
+  accuracy: number;
+  /** Number of exercises the accuracy is based on. */
+  answered: number;
+};
+
+export function describePerformance(perf: ModulePerformance | null): string {
+  if (!perf || perf.answered < 5) {
+    return "No meaningful performance data yet — pitch this module at the expected level for its position in the path.";
+  }
+  const pct = Math.round(perf.accuracy * 100);
+  if (perf.accuracy >= 0.85) {
+    return `The student is answering ${pct}% correctly across ${perf.answered} exercises — they are ahead of pace. Raise the difficulty: denser topics, less review, more challenging structures than this module's position would normally call for.`;
+  }
+  if (perf.accuracy >= 0.65) {
+    return `The student is answering ${pct}% correctly across ${perf.answered} exercises — on pace. Keep the standard ramp for this module's position.`;
+  }
+  if (perf.accuracy >= 0.45) {
+    return `The student is answering ${pct}% correctly across ${perf.answered} exercises — struggling somewhat. Soften the ramp: smaller steps, and fold a review of the previous module's weak points into the first topic.`;
+  }
+  return `The student is answering ${pct}% correctly across ${perf.answered} exercises — struggling badly. Prioritize consolidation: keep topics narrow and concrete, revisit fundamentals from earlier modules, and avoid introducing more than one new structure per topic.`;
+}
+
+export type ModuleTopicsParams = {
+  language: string;
+  objective: string;
+  startingLevel: CalibrationLevel;
+  module: { name: string; description?: string; focus?: string; order: number };
+  /** Names of every module before this one, in order. */
+  previousModules: string[];
+  /** Name of the module that follows, so this one lands the student in the right place. */
+  nextModule: string | null;
+  /** Topic names already taught, so nothing is repeated. */
+  coveredTopics: string[];
+  performance: ModulePerformance | null;
+};
+
+export function buildModuleTopicsPrompt({
+  language,
+  objective,
+  startingLevel,
+  module,
+  previousModules,
+  nextModule,
+  coveredTopics,
+  performance,
+}: ModuleTopicsParams): string {
+  const already =
+    previousModules.length > 0
+      ? `Modules already completed (do not re-teach these as new material):\n${previousModules
+          .map((m, i) => `${i + 1}. ${m}`)
+          .join("\n")}`
+      : "This is the very first module of the path.";
+
+  const covered =
+    coveredTopics.length > 0
+      ? `\n\nTopics already taught — do NOT repeat any of these:\n${coveredTopics.map((t) => `- ${t}`).join("\n")}`
+      : "";
+
+  const lands = nextModule
+    ? `\n\nAfter this module the student moves on to "${nextModule}", so this module must leave them ready for it.`
+    : "\n\nThis is the final module of the path — it should consolidate everything into the stated goal.";
+
+  return `Design the topics for module ${module.order} of a ${language} learning path.
+- Overall goal: ${objective}
+- Student's starting level: ${startingLevel.replace(/_/g, " ")}
+- Module name: ${module.name}
+- Module description: ${module.description ?? ""}
+- Module focus: ${module.focus ?? module.name}
+
+${already}${covered}${lands}
+
+Performance so far: ${describePerformance(performance)}
+
+Level guidance: ${levelNote(startingLevel, language)}
+
+Produce 3–5 topics. Each topic is one concrete ${language} skill the student can practice with exercises.
+Topic names and descriptions in English (they are used for navigation); the language being taught is ${language}.
+
+Return ONLY valid JSON:
+{
+  "topics": [
+    {
+      "name": "Topic name",
       "order": 1,
-      "topics": [
-        {
-          "name": "Topic name",
-          "order": 1,
-          "description": "What this topic covers"
-        }
-      ]
+      "description": "What this topic covers and why it comes here"
     }
   ]
 }`;
