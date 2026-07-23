@@ -79,6 +79,7 @@ const EXERCISE_TYPES: ExerciseType[] = [
   "translation",
   "conjugation",
   "matching",
+  "reading_comprehension",
 ];
 
 function pickNextType(recentTypes: string[]): ExerciseType {
@@ -599,7 +600,7 @@ const app = new Elysia()
       return { error: "language and topic are required" };
     }
     const validTypes: ExerciseType[] = [
-      "multiple_choice", "fill_blank", "translation", "conjugation", "matching",
+      "multiple_choice", "fill_blank", "translation", "conjugation", "matching", "reading_comprehension",
     ];
     if (!validTypes.includes(type)) {
       set.status = 400;

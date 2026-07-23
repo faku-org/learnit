@@ -253,7 +253,8 @@ export type ExerciseType =
   | "fill_blank"
   | "translation"
   | "conjugation"
-  | "matching";
+  | "matching"
+  | "reading_comprehension";
 
 export type WordMeaning = {
   word: string;
@@ -363,6 +364,27 @@ Return JSON:
   "explanation": "Brief notes on the vocabulary (write in ${N})",
   "wordMeanings": []
 }`,
+
+    reading_comprehension: `Create a short reading comprehension exercise.
+Write a short text or story (3–6 sentences) in ${language}, appropriate for ${level} level, on the topic of ${topic}.
+Then create ONE multiple-choice question about it. Randomly pick ONE of these two question focuses (vary this across generations, don't always pick the same one):
+  (a) General comprehension — what the text says, its main idea, or its context (who/what/where/when/why).
+  (b) Vocabulary in context — what a specific word or phrase from the text means as used there.
+The question and all options must be in ${N}, so the student demonstrates understanding without needing to produce ${language}.
+Return JSON:
+{
+  "type": "reading_comprehension",
+  "icon": "a single PascalCase Lucide icon name that best represents what this exercise is about (e.g. UtensilsCrossed, MapPin, Heart, Clock, Users)",
+  "context": "One sentence in ${N}: what the text/story is about and which focus this question tests (comprehension or vocabulary-in-context)",
+  "instruction": "Read the text and answer the question (write in ${N})",
+  "sourceText": "the ${language} text or story",
+  "question": "the comprehension or vocabulary question, in ${N}",
+  "options": ["option in ${N}", "option in ${N}", "option in ${N}", "option in ${N}"],
+  "correctIndex": 0,
+  "explanation": "Why this answer is correct, quoting or referencing the relevant part of the text (write in ${N})",
+  ${wordMeaningsSchema}
+}
+${wordMeaningsNote} Annotate words from the "sourceText" field.`,
   };
 
   const difficultySection = difficultyNote ? `\nDIFFICULTY NOTE: ${difficultyNote}\n` : "";
