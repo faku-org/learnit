@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { getExercises } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { AuthGuard } from "@/components/AuthGuard";
 
 const PAGE_SIZE = 20;
 
@@ -58,7 +59,7 @@ function formatDate(iso: string): string {
   }
 }
 
-export function ExercisesPage() {
+function ExercisesInner() {
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
@@ -270,5 +271,15 @@ export function ExercisesPage() {
         </div>
       )}
     </motion.div>
+  );
+}
+
+// Zero-hook shell: AuthGuard must gate mounting of ExercisesInner, not just its
+// output, or the fetch effects below fire (and 401) before auth is known.
+export function ExercisesPage() {
+  return (
+    <AuthGuard>
+      <ExercisesInner />
+    </AuthGuard>
   );
 }

@@ -4,6 +4,7 @@ import { Flame, ArrowRight } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { getStreak, getCurrentPath } from "@/lib/api";
+import { AuthGuard } from "@/components/AuthGuard";
 
 const containerVariants = {
   hidden: {},
@@ -18,7 +19,7 @@ type PathModule = { name: string; description: string; order: number };
 type Path = { language: string; objective: string; modules: PathModule[] };
 type Streak = { currentStreak: number; longestStreak: number };
 
-export function DashboardContent() {
+function DashboardInner() {
   const [streak, setStreak] = useState<Streak | null>(null);
   const [path, setPath] = useState<Path | null>(null);
 
@@ -115,5 +116,15 @@ export function DashboardContent() {
         </motion.div>
       )}
     </motion.div>
+  );
+}
+
+// Zero-hook shell: AuthGuard must gate mounting of DashboardInner, not just its
+// output, or the fetch effects below fire (and 401) before auth is known.
+export function DashboardContent() {
+  return (
+    <AuthGuard>
+      <DashboardInner />
+    </AuthGuard>
   );
 }

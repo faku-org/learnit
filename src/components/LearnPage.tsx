@@ -38,6 +38,7 @@ import {
   translateText,
   addVocabulary,
   enrichVocabulary,
+  hydrateModuleTopics,
   type Progress,
 } from "@/lib/api";
 import { getCachedPhraseTranslation, setCachedPhraseTranslation } from "@/components/ClickableText";
@@ -116,6 +117,11 @@ function advanceTopic(progress: Progress, modules: RoadmapModule[]): Progress {
     }
     modIdx++;
     topIdx = 0;
+    // Land on the next module even if its topics have not been generated yet —
+    // hydration is triggered on arrival. Never skip past an outlined module.
+    if (modIdx < modules.length && (modules[modIdx].topics?.length ?? 0) === 0) {
+      return { ...progress, completedTopics: completed, currentModuleIndex: modIdx, currentTopicIndex: 0 };
+    }
   }
   return {
     ...progress,
@@ -125,7 +131,7 @@ function advanceTopic(progress: Progress, modules: RoadmapModule[]): Progress {
   };
 }
 
-export function LearnPage() {
+function LearnInner() {
   const [exercise, setExercise] = useState<Exercise | null>(null);
   const [prevExercise, setPrevExercise] = useState<Exercise | null>(null);
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
@@ -150,12 +156,16 @@ export function LearnPage() {
   const [savingWord, setSavingWord] = useState<string | null>(null);
   const [showWordMenu, setShowWordMenu] = useState(false);
 
+  const [hydratingModules, setHydratingModules] = useState<number[]>([]);
+  const [hydrationError, setHydrationError] = useState(false);
+
   const queueRef = useRef<Exercise[]>([]);
   const currentPathRef = useRef<CurrentPath | null>(null);
   const nativeLangRef = useRef("english");
   const prefetchingRef = useRef(false);
   const progressRef = useRef<Progress | null>(null);
   const activeTopicRef = useRef<string | null>(null);
+  const hydratingRef = useRef<Set<number>>(new Set());
 
   useEffect(() => { queueRef.current = exerciseQueue; }, [exerciseQueue]);
   useEffect(() => { currentPathRef.current = currentPath; }, [currentPath]);
@@ -175,6 +185,12 @@ export function LearnPage() {
     );
   }, [currentPath, progress, activeTopicKey]);
 
+  // The module the student just walked into has an outline but no topics yet.
+  const currentModulePending = useMemo(() => {
+    if (!currentPath || !progress) return false;
+    return (currentPath.modules[progress.currentModuleIndex]?.topics?.length ?? 0) === 0;
+  }, [currentPath, progress]);
+
   const buildParams = useCallback(() => {
     const path = currentPathRef.current;
     const language = path?.language ?? "japanese";
@@ -182,13 +198,16 @@ export function LearnPage() {
     const activeKey = activeTopicRef.current;
     let topic = "greetings";
     if (path && prog) {
-      if (activeKey) {
-        const [mIdx, tIdx] = activeKey.split("-").map(Number);
-        topic = path.modules[mIdx]?.topics?.[tIdx]?.name ?? topic;
-      } else {
-        topic =
-          path.modules[prog.currentModuleIndex]?.topics?.[prog.currentTopicIndex]?.name ?? topic;
-      }
+      const resolved = activeKey
+        ? (() => {
+            const [mIdx, tIdx] = activeKey.split("-").map(Number);
+            return path.modules[mIdx]?.topics?.[tIdx]?.name;
+          })()
+        : path.modules[prog.currentModuleIndex]?.topics?.[prog.currentTopicIndex]?.name;
+      // Module topics are written on demand. Until they arrive there is no topic
+      // to practice — wait rather than drifting off-path onto a fallback.
+      if (!resolved) return null;
+      topic = resolved;
     } else if (path) {
       const allTopics = path.modules.flatMap((m) => m.topics ?? []);
       if (allTopics.length > 0) {
@@ -201,11 +220,13 @@ export function LearnPage() {
   const prefillQueue = useCallback(
     async (needed: number) => {
       if (prefetchingRef.current || needed <= 0) return;
+      const params = buildParams();
+      if (!params) return;
       prefetchingRef.current = true;
       try {
         const results = await Promise.allSettled(
           Array.from({ length: needed }, () =>
-            getNextExercise(buildParams()).then((d) => d as unknown as Exercise),
+            getNextExercise(params).then((d) => d as unknown as Exercise),
           ),
         );
         const fetched = results
@@ -247,6 +268,59 @@ export function LearnPage() {
     );
   }, [prefillQueue]);
 
+  /**
+   * Fill in a module's topics on demand. The path is stored as an outline plus
+   * module 1; every later module is written from the student's real performance,
+   * which keeps the path adaptive and each LLM call well under the output limit.
+   */
+  const ensureModuleHydrated = useCallback(
+    async (moduleIdx: number) => {
+      const path = currentPathRef.current;
+      if (!path || moduleIdx < 0 || moduleIdx >= path.modules.length) return;
+      if ((path.modules[moduleIdx].topics?.length ?? 0) > 0) return;
+      if (hydratingRef.current.has(moduleIdx)) return;
+
+      hydratingRef.current.add(moduleIdx);
+      setHydratingModules([...hydratingRef.current]);
+      setHydrationError(false);
+      try {
+        const { topics } = await hydrateModuleTopics(path._id, moduleIdx + 1);
+        const merged: CurrentPath = {
+          ...path,
+          modules: path.modules.map((m, i) => (i === moduleIdx ? { ...m, topics } : m)),
+        };
+        currentPathRef.current = merged;
+        setCurrentPath(merged);
+        // The student may be standing in this module with an empty queue.
+        if (progressRef.current?.currentModuleIndex === moduleIdx) {
+          prefillQueue(QUEUE_SIZE - queueRef.current.length);
+        }
+      } catch {
+        setHydrationError(true);
+        toast.error("Couldn't prepare that module.");
+      } finally {
+        hydratingRef.current.delete(moduleIdx);
+        setHydratingModules([...hydratingRef.current]);
+      }
+    },
+    [prefillQueue],
+  );
+
+  // Hydrate the module the student is standing in, and prefetch the next one as
+  // soon as they reach the final topic of the current module.
+  useEffect(() => {
+    if (!currentPath || !progress) return;
+    const mIdx = progress.currentModuleIndex;
+    const topics = currentPath.modules[mIdx]?.topics ?? [];
+    if (topics.length === 0) {
+      ensureModuleHydrated(mIdx);
+      return;
+    }
+    if (progress.currentTopicIndex >= topics.length - 1) {
+      ensureModuleHydrated(mIdx + 1);
+    }
+  }, [currentPath, progress, ensureModuleHydrated]);
+
   const resetInteractionState = () => {
     setSubmitted(false);
     setSelectedAnswer(null);
@@ -276,9 +350,12 @@ export function LearnPage() {
       return;
     }
 
+    const params = buildParams();
+    if (!params) return;
+
     setLoading(true);
     try {
-      const data = await getNextExercise(buildParams());
+      const data = await getNextExercise(params);
       setExercise(data as unknown as Exercise);
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Failed to load exercise");
@@ -476,7 +553,6 @@ export function LearnPage() {
   const hasPath = Boolean(currentPath);
 
   return (
-    <AuthGuard>
     <div className="flex">
       {showFeedback && (
         <FeedbackModal
@@ -504,6 +580,7 @@ export function LearnPage() {
                   `${progress.currentModuleIndex}-${progress.currentTopicIndex}`
                 }
                 correctToAdvance={CORRECT_TO_ADVANCE}
+                hydratingModules={hydratingModules}
                 onTopicSelect={handleTopicSelect}
               />
             </div>
@@ -552,7 +629,42 @@ export function LearnPage() {
             </motion.div>
           )}
 
-          {!exercise && !loading && (
+          {currentModulePending && !exercise && !loading && (
+            <motion.div variants={itemVariants} className="mt-6">
+              <Card className="text-center py-12">
+                <CardContent className="flex flex-col items-center gap-3">
+                  {hydrationError ? (
+                    <X size={40} className="text-red-400/70" />
+                  ) : (
+                    <Loader2 size={40} className="text-primary animate-spin" />
+                  )}
+                  <div>
+                    <p className="text-foreground font-medium">
+                      {hydrationError ? "Couldn't design " : "Designing "}
+                      {currentPath?.modules[progress?.currentModuleIndex ?? 0]?.name ??
+                        "your next module"}
+                    </p>
+                    <p className="text-sm text-muted-foreground mt-1 max-w-sm">
+                      {hydrationError
+                        ? "The lesson plan for this module didn't generate. Give it another go."
+                        : "This module is being written around how you've actually been doing, so it lands at the right difficulty."}
+                    </p>
+                  </div>
+                  {hydrationError && progress && (
+                    <Button
+                      onClick={() => ensureModuleHydrated(progress.currentModuleIndex)}
+                      className="gap-2"
+                    >
+                      <RefreshCw size={14} />
+                      Try again
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+            </motion.div>
+          )}
+
+          {!exercise && !loading && !currentModulePending && (
             <motion.div variants={itemVariants} className="mt-6">
               <Card className="text-center py-12">
                 <CardContent className="flex flex-col items-center gap-3">
@@ -902,6 +1014,15 @@ export function LearnPage() {
         </div>
       </motion.div>
     </div>
+  );
+}
+
+// Zero-hook shell: AuthGuard must gate mounting of LearnInner, not just its
+// output, or the fetch effects below fire (and 401) before auth is known.
+export function LearnPage() {
+  return (
+    <AuthGuard>
+      <LearnInner />
     </AuthGuard>
   );
 }
