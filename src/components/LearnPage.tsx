@@ -345,7 +345,7 @@ export function LearnPage() {
   const handleSubmit = () => {
     if (!exercise) return;
     let isCorrect = false;
-    if (exercise.type === "multiple_choice") {
+    if (exercise.type === "multiple_choice" || exercise.type === "reading_comprehension") {
       isCorrect = selectedAnswer === (exercise.correctIndex ?? 0);
     } else {
       const lang = currentPath?.language ?? "";
@@ -468,10 +468,13 @@ export function LearnPage() {
 
   // ── Main render ───────────────────────────────────────────────────────────
 
+  const isChoiceType =
+    exercise?.type === "multiple_choice" || exercise?.type === "reading_comprehension";
+
   const canSubmit =
     exercise &&
     !submitted &&
-    (exercise.type === "multiple_choice" ? selectedAnswer !== null : textAnswer.trim().length > 0);
+    (isChoiceType ? selectedAnswer !== null : textAnswer.trim().length > 0);
 
   const hasPath = Boolean(currentPath);
 
@@ -667,7 +670,9 @@ export function LearnPage() {
                         const lang = currentPath?.language ?? "japanese";
                         const langCode = toLangCode(lang);
                         const displayText =
-                          exercise.question ?? exercise.sentence ?? exercise.sourceText;
+                          exercise.type === "reading_comprehension"
+                            ? exercise.sourceText
+                            : (exercise.question ?? exercise.sentence ?? exercise.sourceText);
                         const speakableText = displayText?.replace(/___/g, "");
                         const handleTranslatePhrase = async () => {
                           const cached = getCachedPhraseTranslation(displayText!, nativeLanguage);
@@ -724,7 +729,11 @@ export function LearnPage() {
                         );
                       })()}
 
-                      {!gaveUp && exercise.type === "multiple_choice" && exercise.options && (
+                      {exercise.type === "reading_comprehension" && exercise.question && (
+                        <p className="text-foreground font-medium">{exercise.question}</p>
+                      )}
+
+                      {!gaveUp && isChoiceType && exercise.options && (
                         <div className="space-y-2">
                           {exercise.options.map((opt, i) => (
                             <button
