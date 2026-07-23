@@ -1,0 +1,26 @@
+name: Chore / maintenance
+description: Refactoring, dependency updates, tooling, or other non-feature work
+title: "chore: "
+labels: ["chore"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: What needs to be done?
+    validations:
+      required: true
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Why?
+      description: Motivation, e.g. tech debt, security, DX.
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+    validations:
+      required: false
