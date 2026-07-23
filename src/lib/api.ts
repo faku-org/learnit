@@ -32,6 +32,8 @@ export const createGoal = (data: { language: string; objective: string; level: s
 
 export type CalibrationLevel = "complete_beginner" | "some_basics" | "elementary" | "intermediate";
 
+export type CalibrationProbeLevel = "beginner" | "elementary" | "intermediate" | "advanced";
+
 export type CalibrationQuestion = {
   topic: string;
   question: string;
@@ -40,18 +42,23 @@ export type CalibrationQuestion = {
   correctIndex: number;
 };
 
-export const generateCalibrationQuestions = (data: {
+/** One stage of the adaptive placement test. The caller picks the next probeLevel. */
+export const generateCalibrationStage = (data: {
   language: string;
   nativeLanguage?: string;
-  targetLevel?: "beginner" | "elementary" | "intermediate" | "advanced";
-  attempt?: number;
+  probeLevel: CalibrationProbeLevel;
+  stage: number;
+  usedTopics?: string[];
+  askedQuestions?: string[];
 }) =>
-  request<{ questions: CalibrationQuestion[] }>("/api/calibration/generate", {
-    method: "POST",
-    body: JSON.stringify(data),
-  });
+  request<{ probeLevel: CalibrationProbeLevel; stage: number; questions: CalibrationQuestion[] }>(
+    "/api/calibration/stage",
+    { method: "POST", body: JSON.stringify(data) },
+  );
 
 // ── Path ──────────────────────────────────────────────────────────────────────
+
+export type PathTopic = { name: string; order: number; description?: string };
 
 export const generatePath = (data: {
   language: string;
@@ -64,6 +71,13 @@ export const generatePath = (data: {
     method: "POST",
     body: JSON.stringify(data),
   });
+
+/** Fill in the topics of an outlined module. Idempotent — safe to call twice. */
+export const hydrateModuleTopics = (pathId: string, order: number) =>
+  request<{ order: number; topics: PathTopic[]; cached: boolean }>(
+    `/api/path/${pathId}/module/${order}/topics`,
+    { method: "POST" },
+  );
 
 export const getCurrentPath = () => request<Record<string, unknown>>("/api/path/current");
 export const getPaths = () => request<Record<string, unknown>[]>("/api/paths");

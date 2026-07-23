@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Check, ChevronRight, Lock, ChevronDown } from "lucide-react";
+import { Check, ChevronRight, Lock, ChevronDown, Loader2, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Progress } from "@/lib/api";
 
 type Topic = { name: string; order: number; description?: string };
-type Module = { name: string; order: number; topics?: Topic[] };
+type Module = { name: string; description?: string; focus?: string; order: number; topics?: Topic[] };
 
 export type { Module as RoadmapModule, Topic as RoadmapTopic };
 
@@ -15,6 +15,8 @@ interface PathRoadmapProps {
   progress: Progress;
   activeTopicKey: string | null;
   correctToAdvance: number;
+  /** Indices of modules whose topics are currently being generated. */
+  hydratingModules?: number[];
   onTopicSelect: (moduleIdx: number, topicIdx: number, topicName: string) => void;
 }
 
@@ -48,6 +50,7 @@ export function PathRoadmap({
   progress,
   activeTopicKey,
   correctToAdvance,
+  hydratingModules = [],
   onTopicSelect,
 }: PathRoadmapProps) {
   const currentFlat = getFlatIndex(
@@ -139,6 +142,24 @@ export function PathRoadmap({
                     className="overflow-hidden"
                   >
                     <div className="flex flex-col gap-0.5 pt-0.5 pb-1">
+                      {/* Modules past the current one exist only as an outline until
+                          the student gets close — their topics are written then. */}
+                      {topics.length === 0 && (
+                        <div className="flex items-center gap-2.5 px-2 py-1.5 text-xs text-muted-foreground/70">
+                          <span className="shrink-0 w-4 h-4 flex items-center justify-center">
+                            {hydratingModules.includes(mIdx) ? (
+                              <Loader2 size={11} className="animate-spin text-primary" />
+                            ) : (
+                              <Sparkles size={11} className="text-accent/50" />
+                            )}
+                          </span>
+                          <span className="flex-1 leading-tight">
+                            {hydratingModules.includes(mIdx)
+                              ? "Designing lessons..."
+                              : mod.focus ?? "Adapts to your progress"}
+                          </span>
+                        </div>
+                      )}
                       {topics.map((topic, tIdx) => {
                         const status = getTopicStatus(mIdx, tIdx, progress);
                         const topicKey = `${mIdx}-${tIdx}`;

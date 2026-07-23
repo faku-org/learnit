@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { getPaths, deletePath, updatePreferences, getPreferences } from "@/lib/api";
 import { toast } from "sonner";
+import { AuthGuard } from "@/components/AuthGuard";
 
 const containerVariants = {
   hidden: {},
@@ -37,7 +38,7 @@ type LearningPath = {
   active: boolean;
 };
 
-export function SettingsPage() {
+function SettingsInner() {
   const [paths, setPaths] = useState<LearningPath[]>([]);
   const [activePathId, setActivePathId] = useState<string | null>(null);
   const [nativeLanguage, setNativeLanguage] = useState("english");
@@ -255,5 +256,15 @@ export function SettingsPage() {
         </motion.p>
       )}
     </motion.div>
+  );
+}
+
+// Zero-hook shell: AuthGuard must gate mounting of SettingsInner, not just its
+// output, or the fetch effects below fire (and 401) before auth is known.
+export function SettingsPage() {
+  return (
+    <AuthGuard>
+      <SettingsInner />
+    </AuthGuard>
   );
 }
