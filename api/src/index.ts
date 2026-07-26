@@ -5,6 +5,7 @@ import { MsEdgeTTS, OUTPUT_FORMAT } from "msedge-tts";
 import { connectDB, getDB } from "./db";
 import { GoalSchema, VocabularySchema, PreferencesSchema } from "./schemas";
 import { generateJSON, validateExercise, PRO_MODEL } from "./llm";
+import { synthesizeSpeechXai, transcribeSpeechXai, createRealtimeTokenXai } from "./xaiVoice";
 import {
   PATH_OUTLINE_SYSTEM_PROMPT,
   buildPathOutlinePrompt,
@@ -19,6 +20,10 @@ import {
   CALIBRATION_SYSTEM_PROMPT,
   buildCalibrationStagePrompt,
   CALIBRATION_STAGE_SIZE,
+  SPEAK_SCENARIO_SYSTEM_PROMPT,
+  buildSpeakScenarioPrompt,
+  SPEAK_GRADE_SYSTEM_PROMPT,
+  buildSpeakGradePrompt,
   type ExerciseType,
   type CalibrationLevel,
   type CalibrationProbeLevel,
@@ -1216,6 +1221,111 @@ Return JSON with all explanations and feedback written in ${nativeLanguage}:
     } catch (err) {
       set.status = 500;
       return { error: "TTS failed", detail: String(err) };
+    }
+  })
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Speak — voice practice, powered by xAI (TTS, STT, Speech-to-Speech)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  .post("/api/speak/tts", async ({ body, headers, set }: any) => {
+    const user = await requireUser(headers.authorization, set);
+    if (!user) return { error: "Unauthorized" };
+    const { text, language, voice } = body as { text?: string; language?: string; voice?: string };
+    if (!text?.trim() || !language) {
+      set.status = 400;
+      return { error: "text and language are required" };
+    }
+    try {
+      const { buffer, contentType } = await synthesizeSpeechXai(text, language, voice);
+      return new Response(buffer, { headers: { "Content-Type": contentType } });
+    } catch (err) {
+      set.status = 500;
+      return { error: "TTS failed", detail: String(err) };
+    }
+  })
+
+  .post("/api/speak/transcribe", async ({ body, headers, set }: any) => {
+    const user = await requireUser(headers.authorization, set);
+    if (!user) return { error: "Unauthorized" };
+    const { audio, language } = body as { audio?: File; language?: string };
+    if (!audio || audio.size === 0) {
+      set.status = 400;
+      return { error: "audio is required" };
+    }
+    try {
+      const transcript = await transcribeSpeechXai(audio, language || undefined);
+      return { transcript };
+    } catch (err) {
+      set.status = 500;
+      return { error: "Transcription failed", detail: String(err) };
+    }
+  })
+
+  // Mints a short-lived client secret so the browser can open the Speech-to-
+  // Speech WebSocket directly without ever seeing XAI_API_KEY.
+  .post("/api/speak/realtime-token", async ({ headers, set }: any) => {
+    const user = await requireUser(headers.authorization, set);
+    if (!user) return { error: "Unauthorized" };
+    try {
+      return await createRealtimeTokenXai();
+    } catch (err) {
+      set.status = 500;
+      return { error: "Realtime token request failed", detail: String(err) };
+    }
+  })
+
+  .post("/api/speak/scenario", async ({ body, headers, set }: any) => {
+    const user = await requireUser(headers.authorization, set);
+    if (!user) return { error: "Unauthorized" };
+    const { language, level = "beginner", topic = "everyday conversation", nativeLanguage = "english" } = body;
+    if (!language) {
+      set.status = 400;
+      return { error: "language is required" };
+    }
+    try {
+      const scenario = await generateJSON<{
+        situation: string;
+        prompt: string;
+        sampleResponse: string;
+      }>(
+        SPEAK_SCENARIO_SYSTEM_PROMPT,
+        buildSpeakScenarioPrompt(language, level, topic, nativeLanguage),
+        { temperature: 0.9, maxTokens: 512 },
+      );
+      return scenario;
+    } catch (err) {
+      set.status = 500;
+      return { error: "Scenario generation failed", detail: String(err) };
+    }
+  })
+
+  .post("/api/speak/grade", async ({ body, headers, set }: any) => {
+    const user = await requireUser(headers.authorization, set);
+    if (!user) return { error: "Unauthorized" };
+    const {
+      language, situation, prompt, transcript, nativeLanguage = "english",
+    } = body as {
+      language?: string; situation?: string; prompt?: string; transcript?: string; nativeLanguage?: string;
+    };
+    if (!language || !situation || !prompt || !transcript) {
+      set.status = 400;
+      return { error: "language, situation, prompt, and transcript are required" };
+    }
+    try {
+      const grade = await generateJSON<{
+        correct: boolean;
+        feedback: string;
+        corrected: string | null;
+      }>(
+        SPEAK_GRADE_SYSTEM_PROMPT,
+        buildSpeakGradePrompt({ language, situation, prompt, transcript, nativeLanguage }),
+        { temperature: 0.3, maxTokens: 512 },
+      );
+      return grade;
+    } catch (err) {
+      set.status = 500;
+      return { error: "Grading failed", detail: String(err) };
     }
   })
 
