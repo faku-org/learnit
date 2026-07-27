@@ -15,8 +15,8 @@ const TYPES = [
   { value: "fill_blank", label: "Fill in blank" },
   { value: "translation", label: "Translation" },
   { value: "conjugation", label: "Conjugation" },
-  { value: "matching", label: "Matching" },
   { value: "reading_comprehension", label: "Reading comprehension" },
+  { value: "word_order", label: "Word order" },
 ] as const;
 
 const TYPE_COLORS: Record<string, string> = {
@@ -26,6 +26,7 @@ const TYPE_COLORS: Record<string, string> = {
   conjugation: "bg-green-500/10 text-green-400",
   matching: "bg-pink-500/10 text-pink-400",
   reading_comprehension: "bg-cyan-500/10 text-cyan-400",
+  word_order: "bg-indigo-500/10 text-indigo-400",
 };
 
 type ExerciseDoc = {

@@ -85,6 +85,8 @@ type Exercise = {
   options?: string[];
   correctIndex?: number;
   correctAnswer?: string;
+  words?: string[];
+  pairs?: { left: string; right: string }[];
   hint?: string;
   explanation?: string;
   wordMeanings?: WordMeaning[];
@@ -142,6 +144,9 @@ function LearnInner() {
   const [prevExercise, setPrevExercise] = useState<Exercise | null>(null);
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [textAnswer, setTextAnswer] = useState("");
+  const [selectedWordIndices, setSelectedWordIndices] = useState<number[]>([]);
+  const [matchSelections, setMatchSelections] = useState<Record<string, string>>({});
+  const [selectedLeft, setSelectedLeft] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const [correct, setCorrect] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -202,6 +207,53 @@ function LearnInner() {
     if (!currentPath || !progress) return false;
     return (currentPath.modules[progress.currentModuleIndex]?.topics?.length ?? 0) === 0;
   }, [currentPath, progress]);
+
+  const wordTiles = useMemo(() => {
+    if (!exercise?.words) return [];
+    const tiles = exercise.words.map((word, idx) => ({ word, idx }));
+    for (let i = tiles.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [tiles[i], tiles[j]] = [tiles[j], tiles[i]];
+    }
+    return tiles;
+  }, [exercise]);
+
+  const shuffledRightOptions = useMemo(() => {
+    if (!exercise?.pairs) return [];
+    const rights = exercise.pairs.map((p) => p.right);
+    for (let i = rights.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [rights[i], rights[j]] = [rights[j], rights[i]];
+    }
+    return rights;
+  }, [exercise]);
+
+  const handleLeftClick = (left: string) => {
+    if (submitted) return;
+    if (matchSelections[left]) {
+      setMatchSelections((prev) => {
+        const next = { ...prev };
+        delete next[left];
+        return next;
+      });
+      setSelectedLeft(null);
+      return;
+    }
+    setSelectedLeft((prev) => (prev === left ? null : left));
+  };
+
+  const handleRightClick = (right: string) => {
+    if (submitted || !selectedLeft) return;
+    setMatchSelections((prev) => {
+      const next = { ...prev };
+      for (const k of Object.keys(next)) {
+        if (next[k] === right) delete next[k];
+      }
+      next[selectedLeft] = right;
+      return next;
+    });
+    setSelectedLeft(null);
+  };
 
   const buildParams = useCallback(() => {
     const path = currentPathRef.current;
@@ -361,6 +413,9 @@ function LearnInner() {
     setSubmitted(false);
     setSelectedAnswer(null);
     setTextAnswer("");
+    setSelectedWordIndices([]);
+    setMatchSelections({});
+    setSelectedLeft(null);
     setGaveUp(false);
     setExplaining(false);
     setDetailedExpl(null);
@@ -530,6 +585,13 @@ function LearnInner() {
     let isCorrect = false;
     if (exercise.type === "multiple_choice" || exercise.type === "reading_comprehension") {
       isCorrect = selectedAnswer === (exercise.correctIndex ?? 0);
+    } else if (exercise.type === "word_order") {
+      isCorrect =
+        selectedWordIndices.length === (exercise.words?.length ?? 0) &&
+        selectedWordIndices.every((idx, i) => idx === i);
+    } else if (exercise.type === "matching") {
+      const pairs = exercise.pairs ?? [];
+      isCorrect = pairs.length > 0 && pairs.every((p) => matchSelections[p.left] === p.right);
     } else {
       const lang = currentPath?.language ?? "";
       const input = normalizeAnswer(textAnswer, lang);
@@ -660,7 +722,14 @@ function LearnInner() {
   const canSubmit =
     exercise &&
     !submitted &&
-    (isChoiceType ? selectedAnswer !== null : textAnswer.trim().length > 0);
+    (isChoiceType
+      ? selectedAnswer !== null
+      : exercise.type === "word_order"
+        ? selectedWordIndices.length > 0 && selectedWordIndices.length === (exercise.words?.length ?? 0)
+        : exercise.type === "matching"
+          ? (exercise.pairs?.length ?? 0) > 0 &&
+            Object.keys(matchSelections).length === (exercise.pairs?.length ?? 0)
+          : textAnswer.trim().length > 0);
 
   const hasPath = Boolean(currentPath);
 
@@ -989,8 +1058,118 @@ function LearnInner() {
                         </div>
                       )}
 
+                      {!gaveUp && exercise.type === "word_order" && exercise.words && (
+                        <div className="space-y-3">
+                          <div className="min-h-14 flex flex-wrap items-center gap-2 p-3 rounded-lg border border-dashed border-border bg-secondary/30">
+                            {selectedWordIndices.length === 0 && (
+                              <span className="text-xs text-muted-foreground">
+                                Tap words below to build the sentence
+                              </span>
+                            )}
+                            {selectedWordIndices.map((idx, pos) => (
+                              <button
+                                key={pos}
+                                onClick={() =>
+                                  !submitted &&
+                                  setSelectedWordIndices((prev) => prev.filter((_, i) => i !== pos))
+                                }
+                                disabled={submitted}
+                                className={[
+                                  "px-3 py-1.5 rounded-lg border text-sm transition-colors",
+                                  submitted
+                                    ? correct
+                                      ? "border-accent bg-accent/10 text-accent"
+                                      : "border-red-500/30 bg-red-500/5 text-red-400"
+                                    : "border-primary bg-primary/10 text-foreground hover:bg-primary/20",
+                                ].join(" ")}
+                              >
+                                {wordTiles.find((t) => t.idx === idx)?.word}
+                              </button>
+                            ))}
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {wordTiles
+                              .filter((t) => !selectedWordIndices.includes(t.idx))
+                              .map((t) => (
+                                <button
+                                  key={t.idx}
+                                  onClick={() =>
+                                    !submitted &&
+                                    setSelectedWordIndices((prev) => [...prev, t.idx])
+                                  }
+                                  disabled={submitted}
+                                  className="px-3 py-1.5 rounded-lg border border-border text-sm hover:border-primary/30 disabled:opacity-40 transition-colors"
+                                >
+                                  {t.word}
+                                </button>
+                              ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {!gaveUp && exercise.type === "matching" && exercise.pairs && (
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-2">
+                            {exercise.pairs.map((p) => {
+                              const isSelected = selectedLeft === p.left;
+                              const matchedRight = matchSelections[p.left];
+                              const isCorrectPair = submitted && matchedRight === p.right;
+                              return (
+                                <button
+                                  key={p.left}
+                                  onClick={() => handleLeftClick(p.left)}
+                                  disabled={submitted}
+                                  className={[
+                                    "w-full text-left p-2.5 rounded-lg border text-sm transition-colors",
+                                    submitted
+                                      ? isCorrectPair
+                                        ? "border-accent bg-accent/10 text-accent"
+                                        : "border-red-500/30 bg-red-500/5 text-red-400"
+                                      : isSelected
+                                        ? "border-primary bg-primary/10"
+                                        : matchedRight
+                                          ? "border-accent/40 bg-accent/5"
+                                          : "border-border hover:border-primary/30",
+                                  ].join(" ")}
+                                >
+                                  {p.left}
+                                  {matchedRight && (
+                                    <span className="text-muted-foreground"> &rarr; {matchedRight}</span>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          <div className="space-y-2">
+                            {shuffledRightOptions.map((r) => {
+                              const usedBy = Object.entries(matchSelections).find(
+                                ([, v]) => v === r,
+                              )?.[0];
+                              return (
+                                <button
+                                  key={r}
+                                  onClick={() => handleRightClick(r)}
+                                  disabled={submitted || !selectedLeft}
+                                  className={[
+                                    "w-full text-left p-2.5 rounded-lg border text-sm transition-colors",
+                                    usedBy
+                                      ? "border-accent/40 bg-accent/5 text-muted-foreground"
+                                      : "border-border hover:border-primary/30",
+                                    submitted || (!selectedLeft && !usedBy) ? "opacity-50" : "",
+                                  ].join(" ")}
+                                >
+                                  {r}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
                       {!gaveUp &&
-                        (exercise.type === "fill_blank" || exercise.type === "translation") && (
+                        (exercise.type === "fill_blank" ||
+                          exercise.type === "translation" ||
+                          exercise.type === "conjugation") && (
                           <input
                             type="text"
                             value={textAnswer}
