@@ -17,6 +17,8 @@ import {
 } from "@/lib/api";
 import { useRealtimeVoice } from "@/lib/useRealtimeVoice";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
+import "@/lib/i18n";
 
 const LANGUAGES = [
   "japanese", "chinese", "korean", "spanish", "french", "german", "italian",
@@ -183,6 +185,7 @@ function pickRecorderMime(): { mime: string; ext: string } {
 }
 
 function SpeakInner() {
+  const { t } = useTranslation();
   const [mode, setMode] = useState<Mode>("repeat");
   const [language, setLanguage] = useState<Language>("japanese");
   const [nativeLanguage, setNativeLanguage] = useState("english");
@@ -277,7 +280,7 @@ function SpeakInner() {
         await audio.play();
       } catch {
         setIsSpeaking(false);
-        toast.error("Couldn't play audio.");
+        toast.error(t("speak.playAudioFailed"));
       }
     },
     [language],
@@ -317,7 +320,7 @@ function SpeakInner() {
           const { transcript } = await transcribeSpeech(blob, languageRef.current, filename);
           onFinal(transcript);
         } catch {
-          toast.error("Transcription failed. Try again.");
+          toast.error(t("speak.transcriptionFailed"));
           onFinal("");
         }
       };
@@ -327,9 +330,9 @@ function SpeakInner() {
       setIsRecording(true);
     } catch (err) {
       if ((err as DOMException)?.name === "NotAllowedError") {
-        toast.error("Microphone access denied. Please allow microphone access.");
+        toast.error(t("speak.micDenied"));
       } else {
-        toast.error("Couldn't access the microphone.");
+        toast.error(t("speak.micAccessFailed"));
       }
     }
   }, []);
@@ -368,7 +371,7 @@ function SpeakInner() {
       });
       setScenario(result);
     } catch {
-      toast.error("Couldn't generate a scenario. Try again.");
+      toast.error(t("speak.scenarioGenFailedToast"));
     } finally {
       setScenarioLoading(false);
     }
@@ -392,9 +395,9 @@ function SpeakInner() {
       });
     } catch (err) {
       if ((err as DOMException)?.name === "NotAllowedError") {
-        toast.error("Microphone access denied. Please allow microphone access.");
+        toast.error(t("speak.micDenied"));
       } else {
-        toast.error("Couldn't start the conversation.");
+        toast.error(t("speak.conversationStartFailed"));
       }
     }
   }, [scenario, pathContext, language, nativeLanguage, voice.start]);
@@ -414,7 +417,7 @@ function SpeakInner() {
       });
       setGrade(result);
     } catch {
-      toast.error("Couldn't get feedback for that conversation.");
+      toast.error(t("speak.gradingFailed"));
     } finally {
       setGradingLoading(false);
     }
@@ -428,10 +431,10 @@ function SpeakInner() {
       className="px-6 py-8 max-w-3xl mx-auto w-full"
     >
       <motion.h1 variants={itemVariants} className="font-display text-3xl text-foreground mb-2">
-        Speak
+        {t("speak.title")}
       </motion.h1>
       <motion.p variants={itemVariants} className="text-muted-foreground mb-6">
-        Repeat phrases or hold a live spoken conversation — all powered by xAI voice.
+        {t("speak.subtitle")}
       </motion.p>
 
       <motion.div variants={itemVariants} className="flex gap-2 mb-6">
@@ -445,7 +448,7 @@ function SpeakInner() {
           ].join(" ")}
         >
           <Volume2 size={13} />
-          Repeat after me
+          {t("speak.modeRepeat")}
         </button>
         <button
           onClick={() => switchMode("scenario")}
@@ -457,7 +460,7 @@ function SpeakInner() {
           ].join(" ")}
         >
           <MessagesSquare size={13} />
-          Scenario
+          {t("speak.modeScenario")}
         </button>
       </motion.div>
 
@@ -474,7 +477,7 @@ function SpeakInner() {
                   : "bg-secondary text-muted-foreground hover:text-foreground",
               ].join(" ")}
             >
-              {lang}
+              {t(`common.languages.${lang}`)}
             </button>
           ))}
         </motion.div>
@@ -494,7 +497,7 @@ function SpeakInner() {
               <Card>
                 <CardHeader>
                   <CardTitle className="text-xs text-muted-foreground uppercase tracking-widest">
-                    Listen and repeat
+                    {t("speak.listenAndRepeat")}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-6">
@@ -513,7 +516,7 @@ function SpeakInner() {
                       className="gap-2"
                     >
                       <Volume2 size={18} className={isSpeaking ? "text-accent animate-pulse" : ""} />
-                      {isSpeaking ? "Speaking..." : "Listen"}
+                      {isSpeaking ? t("speak.speaking") : t("common.listen")}
                     </Button>
                   </div>
                 </CardContent>
@@ -542,10 +545,10 @@ function SpeakInner() {
               </button>
               <p className="text-xs text-muted-foreground">
                 {isRecording
-                  ? (interimTranscript || "Listening... speak now")
+                  ? (interimTranscript || t("speak.listening"))
                   : repeatPhase === "transcribing"
-                    ? "Transcribing..."
-                    : "Tap the mic and repeat the phrase"}
+                    ? t("speak.transcribing")
+                    : t("speak.tapToRepeat")}
               </p>
             </motion.div>
 
@@ -563,17 +566,17 @@ function SpeakInner() {
                     >
                       {repeatFeedback === "correct" ? <Check size={16} /> : <X size={16} />}
                       <span className="text-sm">
-                        {repeatFeedback === "correct" ? "Perfect!" : "Not quite. Keep practicing."}
+                        {repeatFeedback === "correct" ? t("speak.perfect") : t("speak.notQuite")}
                       </span>
                     </div>
 
                     <div className="space-y-2 text-sm">
                       <div>
-                        <span className="text-muted-foreground">You said: </span>
-                        <span className="text-foreground">{repeatTranscript || "(nothing heard)"}</span>
+                        <span className="text-muted-foreground">{t("speak.youSaid")}</span>
+                        <span className="text-foreground">{repeatTranscript || t("speak.nothingHeard")}</span>
                       </div>
                       <div>
-                        <span className="text-muted-foreground">Expected: </span>
+                        <span className="text-muted-foreground">{t("speak.expected")}</span>
                         <span className="text-accent">{phrase.text}</span>
                       </div>
                     </div>
@@ -581,11 +584,11 @@ function SpeakInner() {
                     <div className="flex gap-2">
                       <Button onClick={() => speak(phrase.text)} variant="outline" size="sm" className="gap-1">
                         <Volume2 size={14} />
-                        Listen again
+                        {t("speak.listenAgain")}
                       </Button>
                       <Button onClick={() => pickRandomPhrase()} variant="outline" size="sm" className="gap-1">
                         <RefreshCw size={14} />
-                        New phrase
+                        {t("speak.newPhrase")}
                       </Button>
                     </div>
                   </CardContent>
@@ -599,16 +602,14 @@ function SpeakInner() {
           <motion.div variants={itemVariants} className="text-xs text-muted-foreground">
             {pathContext ? (
               <span>
-                Practicing with your path:{" "}
+                {t("speak.practicingWithPath")}{" "}
                 <span className="text-foreground capitalize">{pathContext.language}</span>
                 {" · "}
                 <span className="text-foreground">{pathContext.topic}</span>
               </span>
             ) : (
               <span>
-                No active learning path yet — generating a general scenario in{" "}
-                <span className="capitalize text-foreground">{language}</span>. Set up a path in Goals
-                for scenarios tailored to what you're studying.
+                {t("speak.noPathScenario", { language: t(`common.languages.${language}`) })}
               </span>
             )}
           </motion.div>
@@ -622,10 +623,10 @@ function SpeakInner() {
           ) : !scenario ? (
             <Card>
               <CardContent className="py-12 flex flex-col items-center justify-center gap-3">
-                <p className="text-sm text-muted-foreground">Couldn't generate a scenario.</p>
+                <p className="text-sm text-muted-foreground">{t("speak.scenarioGenFailed")}</p>
                 <Button onClick={loadScenario} variant="outline" size="sm" className="gap-1">
                   <RefreshCw size={14} />
-                  Try again
+                  {t("speak.tryAgain")}
                 </Button>
               </CardContent>
             </Card>
@@ -644,7 +645,7 @@ function SpeakInner() {
                     <CardHeader>
                       <CardTitle className="text-xs text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
                         <Sparkles size={13} className="text-accent" />
-                        Scenario
+                        {t("speak.modeScenario")}
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
@@ -661,7 +662,7 @@ function SpeakInner() {
                           className="gap-1.5"
                         >
                           <Volume2 size={14} className={isSpeaking ? "text-accent animate-pulse" : ""} />
-                          Hear an example
+                          {t("speak.hearExample")}
                         </Button>
                       </div>
                     </CardContent>
@@ -702,10 +703,10 @@ function SpeakInner() {
                       </button>
                       <p className="text-xs text-muted-foreground">
                         {voice.assistantSpeaking
-                          ? "Grok is speaking..."
+                          ? t("speak.grokSpeaking")
                           : voice.userSpeaking
-                            ? "Listening..."
-                            : "Conversation active — speak anytime"}
+                            ? t("speak.voiceListening")
+                            : t("speak.conversationActive")}
                       </p>
                     </>
                   ) : voice.status === "connecting" ? (
@@ -713,14 +714,14 @@ function SpeakInner() {
                       <div className="w-20 h-20 rounded-full flex items-center justify-center bg-primary/10 text-primary">
                         <Loader2 size={28} className="animate-spin" />
                       </div>
-                      <p className="text-xs text-muted-foreground">Connecting...</p>
+                      <p className="text-xs text-muted-foreground">{t("speak.connecting")}</p>
                     </>
                   ) : voice.status === "error" ? (
                     <>
-                      <p className="text-sm text-muted-foreground">Couldn't connect. Try again.</p>
+                      <p className="text-sm text-muted-foreground">{t("speak.connectFailed")}</p>
                       <Button onClick={handleStartConversation} variant="outline" size="sm" className="gap-1">
                         <RefreshCw size={14} />
-                        Retry
+                        {t("speak.retry")}
                       </Button>
                     </>
                   ) : gradingLoading ? (
@@ -735,7 +736,7 @@ function SpeakInner() {
                         <Mic size={28} />
                       </button>
                       <p className="text-xs text-muted-foreground">
-                        Tap to start a live conversation in {pathContext?.language ?? language}
+                        {t("speak.tapToStartConversation", { language: pathContext?.language ?? language })}
                       </p>
                     </>
                   ) : null}
@@ -757,7 +758,7 @@ function SpeakInner() {
 
                         {grade.corrected && (
                           <div className="text-sm">
-                            <span className="text-muted-foreground">Try instead: </span>
+                            <span className="text-muted-foreground">{t("speak.tryInstead")}</span>
                             <span className="text-accent">{grade.corrected}</span>
                           </div>
                         )}
@@ -771,12 +772,12 @@ function SpeakInner() {
                               className="gap-1"
                             >
                               <Volume2 size={14} />
-                              Listen
+                              {t("common.listen")}
                             </Button>
                           )}
                           <Button onClick={loadScenario} variant="outline" size="sm" className="gap-1">
                             <RefreshCw size={14} />
-                            New scenario
+                            {t("speak.newScenario")}
                           </Button>
                         </div>
                       </CardContent>

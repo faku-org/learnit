@@ -9,6 +9,8 @@ import { CalibrationFlow } from "@/components/CalibrationFlow";
 import { AuthGuard } from "@/components/AuthGuard";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
+import "@/lib/i18n";
 
 const containerVariants = {
   hidden: {},
@@ -37,6 +39,7 @@ type LearningPath = {
 };
 
 function GoalsInner() {
+  const { t } = useTranslation();
   const [language, setLanguage] = useState("");
   const [objective, setObjective] = useState("");
   const [timeframe, setTimeframe] = useState("6 months");
@@ -69,9 +72,9 @@ function GoalsInner() {
     try {
       await updatePreferences({ activePathId: id });
       setActivePathId(id);
-      toast.success("Active path updated");
+      toast.success(t("goals.toastActiveUpdated"));
     } catch {
-      toast.error("Failed to update active path");
+      toast.error(t("goals.toastUpdateActiveError"));
     } finally {
       setSettingActiveId(null);
     }
@@ -84,9 +87,9 @@ function GoalsInner() {
       setPaths((prev) => prev.filter((p) => p._id !== id));
       if (activePathId === id) setActivePathId(null);
       if (newPath?._id === id) setNewPath(null);
-      toast.success("Path deleted");
+      toast.success(t("goals.toastPathDeleted"));
     } catch {
-      toast.error("Failed to delete path");
+      toast.error(t("goals.toastDeleteError"));
     } finally {
       setDeletingId(null);
     }
@@ -94,7 +97,7 @@ function GoalsInner() {
 
   const handleStartGenerate = () => {
     if (!language || !objective) {
-      toast.error("Language and objective are required");
+      toast.error(t("goals.toastLangObjectiveRequired"));
       return;
     }
     setShowCalibration(true);
@@ -116,9 +119,9 @@ function GoalsInner() {
       setLanguage("");
       setObjective("");
       setTimeframe("6 months");
-      toast.success("Learning path generated!");
+      toast.success(t("goals.toastPathGenerated"));
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Failed to generate path");
+      toast.error(e instanceof Error ? e.message : t("goals.toastGenerateError"));
     } finally {
       setGenerating(false);
     }
@@ -132,21 +135,21 @@ function GoalsInner() {
       className="px-6 py-8 max-w-3xl mx-auto w-full"
     >
       <motion.h1 variants={itemVariants} className="font-display text-3xl text-foreground mb-2">
-        Your Goals
+        {t("goals.title")}
       </motion.h1>
       <motion.p variants={itemVariants} className="text-muted-foreground mb-8">
-        Manage your learning paths or create a new one.
+        {t("goals.subtitle")}
       </motion.p>
 
       {/* Existing paths */}
       {loadingPaths ? (
         <motion.div variants={itemVariants} className="flex items-center gap-2 text-muted-foreground text-sm mb-6">
           <Loader2 size={14} className="animate-spin" />
-          Loading paths...
+          {t("goals.loadingPaths")}
         </motion.div>
       ) : paths.length > 0 ? (
         <motion.div variants={itemVariants} className="space-y-3 mb-8">
-          <h2 className="font-display text-lg text-foreground mb-3">Learning Paths</h2>
+          <h2 className="font-display text-lg text-foreground mb-3">{t("goals.learningPaths")}</h2>
           {paths.map((path) => {
             const isActive = path._id === activePathId;
             return (
@@ -164,7 +167,7 @@ function GoalsInner() {
                         {isActive && (
                           <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-primary bg-primary/15 px-1.5 py-0.5 rounded">
                             <Check size={9} />
-                            Active
+                            {t("goals.active")}
                           </span>
                         )}
                         <span className="font-medium">{path.language}</span>
@@ -188,7 +191,7 @@ function GoalsInner() {
                           {settingActiveId === path._id ? (
                             <Loader2 size={12} className="animate-spin" />
                           ) : (
-                            "Set active"
+                            t("goals.setActive")
                           )}
                         </Button>
                       )}
@@ -210,8 +213,10 @@ function GoalsInner() {
                 </CardHeader>
                 <CardContent className="pt-0">
                   <p className="text-xs text-muted-foreground">
-                    {path.modules.length} modules &middot;{" "}
-                    {path.modules.reduce((n, m) => n + (m.topics?.length ?? 0), 0)} topics
+                    {t("goals.modulesAndTopics", {
+                      modules: path.modules.length,
+                      topics: path.modules.reduce((n, m) => n + (m.topics?.length ?? 0), 0),
+                    })}
                   </p>
                 </CardContent>
               </Card>
@@ -219,7 +224,7 @@ function GoalsInner() {
           })}
           <Button asChild className="w-full gap-2 mt-2">
             <a href="/learn">
-              Continue Learning
+              {t("goals.continueLearning")}
               <ArrowRight size={14} />
             </a>
           </Button>
@@ -235,13 +240,13 @@ function GoalsInner() {
             className="w-full gap-2 text-muted-foreground"
           >
             <Plus size={14} />
-            Create new path
+            {t("goals.createNewPath")}
           </Button>
         </motion.div>
       ) : (
         <motion.div variants={itemVariants} className="space-y-4">
           {paths.length > 0 && (
-            <h2 className="font-display text-lg text-foreground">New Path</h2>
+            <h2 className="font-display text-lg text-foreground">{t("goals.newPath")}</h2>
           )}
 
           <AnimatePresence mode="wait">
@@ -256,30 +261,30 @@ function GoalsInner() {
                   <CardHeader>
                     <CardTitle className="text-sm flex items-center gap-2">
                       <Target size={14} className="text-accent" />
-                      Learning Goal
+                      {t("goals.learningGoal")}
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div>
-                      <label className="text-xs text-muted-foreground mb-1 block">Language</label>
+                      <label className="text-xs text-muted-foreground mb-1 block">{t("goals.languageLabel")}</label>
                       <Input
-                        placeholder="e.g., Japanese, French, German"
+                        placeholder={t("goals.languagePlaceholder")}
                         value={language}
                         onChange={(e) => setLanguage(e.target.value)}
                       />
                     </div>
                     <div>
-                      <label className="text-xs text-muted-foreground mb-1 block">Objective</label>
+                      <label className="text-xs text-muted-foreground mb-1 block">{t("goals.objectiveLabel")}</label>
                       <Input
-                        placeholder="e.g., Hold basic conversations for travel"
+                        placeholder={t("goals.objectivePlaceholder")}
                         value={objective}
                         onChange={(e) => setObjective(e.target.value)}
                       />
                     </div>
                     <div>
-                      <label className="text-xs text-muted-foreground mb-1 block">Timeframe</label>
+                      <label className="text-xs text-muted-foreground mb-1 block">{t("goals.timeframeLabel")}</label>
                       <Input
-                        placeholder="e.g., 3 months, 6 months"
+                        placeholder={t("goals.timeframePlaceholder")}
                         value={timeframe}
                         onChange={(e) => setTimeframe(e.target.value)}
                       />
@@ -291,11 +296,11 @@ function GoalsInner() {
                         ) : (
                           <Target size={16} />
                         )}
-                        {generating ? "Generating..." : "Continue"}
+                        {generating ? t("goals.generating") : t("goals.continueBtn")}
                       </Button>
                       {paths.length > 0 && (
                         <Button variant="ghost" onClick={() => setShowForm(false)} className="text-muted-foreground">
-                          Cancel
+                          {t("common.cancel")}
                         </Button>
                       )}
                     </div>
@@ -318,7 +323,7 @@ function GoalsInner() {
                       >
                         <ChevronLeft size={14} />
                       </button>
-                      Calibration — {language}
+                      {t("goals.calibrationTitle", { language })}
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
@@ -345,7 +350,7 @@ function GoalsInner() {
           className="mt-8 space-y-3"
         >
           <h2 className="font-display text-xl text-foreground mb-4">
-            {newPath.language} Path
+            {t("goals.pathTitle", { language: newPath.language })}
           </h2>
           {newPath.modules.map((mod, i) => (
             <Card key={i}>

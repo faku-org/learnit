@@ -1,10 +1,13 @@
 import { motion } from "motion/react";
 import { BookOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useTranslation } from "react-i18next";
+import "@/lib/i18n";
 
 const API = `http://localhost:${import.meta.env.PUBLIC_API_PORT ?? 3001}`;
 
 export function LoginModal() {
+  const { t } = useTranslation();
   const handleGoogleLogin = () => {
     window.location.href = `${API}/api/auth/google`;
   };
@@ -20,13 +23,13 @@ export function LoginModal() {
         <div className="flex flex-col items-center gap-8">
           <div className="flex items-center gap-2.5">
             <BookOpen size={28} className="text-accent" />
-            <span className="font-display text-2xl text-foreground">LearnIt!</span>
+            <span className="font-display text-2xl text-foreground">{t("sidebar.brand")}</span>
           </div>
 
           <div className="w-full space-y-3 text-center">
-            <h2 className="text-lg font-semibold text-foreground">Sign in to continue</h2>
+            <h2 className="text-lg font-semibold text-foreground">{t("auth.signInTitle")}</h2>
             <p className="text-sm text-muted-foreground">
-              Your progress and exercises are saved to your account.
+              {t("auth.signInBody")}
             </p>
 
             <Button
@@ -52,7 +55,7 @@ export function LoginModal() {
                   d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 6.29C4.672 4.163 6.656 3.58 9 3.58Z"
                 />
               </svg>
-              Continue with Google
+              {t("auth.continueWithGoogle")}
             </Button>
           </div>
         </div>

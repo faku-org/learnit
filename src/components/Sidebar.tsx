@@ -1,14 +1,16 @@
 import { motion } from "motion/react";
 import { Home, Target, BookOpen, Mic, Library, Settings, History } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
+import "@/lib/i18n";
 
 const NAV_ITEMS = [
-  { href: "/", icon: Home, label: "Dashboard" },
-  { href: "/goals", icon: Target, label: "Goals" },
-  { href: "/learn", icon: BookOpen, label: "Learn" },
-  { href: "/exercises", icon: History, label: "Exercises" },
-  { href: "/speak", icon: Mic, label: "Speak" },
-  { href: "/vocabulary", icon: Library, label: "Vocabulary" },
+  { href: "/", icon: Home, labelKey: "sidebar.dashboard" },
+  { href: "/goals", icon: Target, labelKey: "sidebar.goals" },
+  { href: "/learn", icon: BookOpen, labelKey: "sidebar.learn" },
+  { href: "/exercises", icon: History, labelKey: "sidebar.exercises" },
+  { href: "/speak", icon: Mic, labelKey: "sidebar.speak" },
+  { href: "/vocabulary", icon: Library, labelKey: "sidebar.vocabulary" },
 ] as const;
 
 interface SidebarProps {
@@ -16,6 +18,7 @@ interface SidebarProps {
 }
 
 export function Sidebar({ currentPath }: SidebarProps) {
+  const { t } = useTranslation();
   const isActive = (href: string) =>
     href === "/" ? currentPath === "/" : currentPath.startsWith(href);
 
@@ -32,13 +35,13 @@ export function Sidebar({ currentPath }: SidebarProps) {
         animate={{ scale: 1, opacity: 1 }}
         transition={{ delay: 0.15, type: "spring", stiffness: 260, damping: 20 }}
         className="mb-5 flex items-center justify-center w-10 h-10"
-        title="LearnIt!"
+        title={t("sidebar.brand")}
       >
         <span className="font-display text-base leading-none text-accent select-none">L!</span>
       </motion.a>
 
       <nav className="flex flex-col gap-1 w-full px-2 flex-1">
-        {NAV_ITEMS.map(({ href, icon: Icon, label }, i) => (
+        {NAV_ITEMS.map(({ href, icon: Icon, labelKey }, i) => (
           <motion.a
             key={href}
             href={href}
@@ -47,7 +50,7 @@ export function Sidebar({ currentPath }: SidebarProps) {
             transition={{ delay: 0.08 + i * 0.05, duration: 0.3, ease: "easeOut" }}
             whileHover={{ scale: 1.08 }}
             whileTap={{ scale: 0.93 }}
-            title={label}
+            title={t(labelKey)}
             className={cn(
               "flex items-center justify-center w-10 h-10 rounded-lg mx-auto transition-colors",
               isActive(href)
@@ -68,7 +71,7 @@ export function Sidebar({ currentPath }: SidebarProps) {
           transition={{ delay: 0.38, duration: 0.3, ease: "easeOut" }}
           whileHover={{ scale: 1.08 }}
           whileTap={{ scale: 0.93 }}
-          title="Settings"
+          title={t("sidebar.settings")}
           className={cn(
             "flex items-center justify-center w-10 h-10 rounded-lg mx-auto transition-colors",
             isActive("/settings")

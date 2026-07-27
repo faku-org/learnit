@@ -4,6 +4,8 @@ import { TrendingDown, Minus, TrendingUp, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { submitFeedback } from "@/lib/api";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
+import "@/lib/i18n";
 
 type Rating = "too_easy" | "just_right" | "too_hard";
 
@@ -12,28 +14,29 @@ type Props = {
   onClose: () => void;
 };
 
-const OPTIONS: { rating: Rating; label: string; description: string; icon: React.ReactNode }[] = [
+const OPTIONS: { rating: Rating; labelKey: string; descriptionKey: string; icon: React.ReactNode }[] = [
   {
     rating: "too_easy",
-    label: "Too easy",
-    description: "I'm breezing through these",
+    labelKey: "feedback.tooEasyLabel",
+    descriptionKey: "feedback.tooEasyDesc",
     icon: <TrendingUp size={18} />,
   },
   {
     rating: "just_right",
-    label: "Just right",
-    description: "Good challenge, I'm learning",
+    labelKey: "feedback.justRightLabel",
+    descriptionKey: "feedback.justRightDesc",
     icon: <Minus size={18} />,
   },
   {
     rating: "too_hard",
-    label: "Too hard",
-    description: "I'm struggling a lot",
+    labelKey: "feedback.tooHardLabel",
+    descriptionKey: "feedback.tooHardDesc",
     icon: <TrendingDown size={18} />,
   },
 ];
 
 export function FeedbackModal({ exerciseCount, onClose }: Props) {
+  const { t } = useTranslation();
   const [selected, setSelected] = useState<Rating | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -42,15 +45,15 @@ export function FeedbackModal({ exerciseCount, onClose }: Props) {
     setSubmitting(true);
     try {
       await submitFeedback({ rating: selected, exerciseCount });
-      const messages: Record<Rating, string> = {
-        too_easy: "Got it — exercises will get harder.",
-        just_right: "Great, keeping it at this level.",
-        too_hard: "Got it — exercises will get easier.",
+      const messageKeys: Record<Rating, string> = {
+        too_easy: "feedback.toastTooEasy",
+        just_right: "feedback.toastJustRight",
+        too_hard: "feedback.toastTooHard",
       };
-      toast.success(messages[selected]);
+      toast.success(t(messageKeys[selected]));
       onClose();
     } catch {
-      toast.error("Failed to save feedback");
+      toast.error(t("feedback.toastError"));
     } finally {
       setSubmitting(false);
     }
@@ -74,9 +77,9 @@ export function FeedbackModal({ exerciseCount, onClose }: Props) {
         >
           <div className="flex items-start justify-between">
             <div>
-              <h3 className="font-semibold text-foreground">How are the exercises?</h3>
+              <h3 className="font-semibold text-foreground">{t("feedback.title")}</h3>
               <p className="text-xs text-muted-foreground mt-0.5">
-                After {exerciseCount} exercises — help us calibrate difficulty.
+                {t("feedback.subtitle", { count: exerciseCount })}
               </p>
             </div>
             <button
@@ -88,7 +91,7 @@ export function FeedbackModal({ exerciseCount, onClose }: Props) {
           </div>
 
           <div className="space-y-2">
-            {OPTIONS.map(({ rating, label, description, icon }) => (
+            {OPTIONS.map(({ rating, labelKey, descriptionKey, icon }) => (
               <button
                 key={rating}
                 onClick={() => setSelected(rating)}
@@ -105,8 +108,8 @@ export function FeedbackModal({ exerciseCount, onClose }: Props) {
                   {icon}
                 </span>
                 <div>
-                  <p className="text-sm font-medium text-foreground">{label}</p>
-                  <p className="text-xs text-muted-foreground">{description}</p>
+                  <p className="text-sm font-medium text-foreground">{t(labelKey)}</p>
+                  <p className="text-xs text-muted-foreground">{t(descriptionKey)}</p>
                 </div>
               </button>
             ))}
@@ -118,10 +121,10 @@ export function FeedbackModal({ exerciseCount, onClose }: Props) {
               disabled={!selected || submitting}
               className="flex-1"
             >
-              {submitting ? "Saving..." : "Submit"}
+              {submitting ? t("common.saving") : t("feedback.submit")}
             </Button>
             <Button variant="ghost" onClick={onClose} className="text-muted-foreground">
-              Skip
+              {t("common.skip")}
             </Button>
           </div>
         </motion.div>

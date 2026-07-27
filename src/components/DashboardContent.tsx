@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { getStreak, getCurrentPath, getStatsOverview, type StatsOverview as Overview } from "@/lib/api";
 import { AuthGuard } from "@/components/AuthGuard";
 import { StatsOverview } from "@/components/StatsOverview";
+import { useTranslation } from "react-i18next";
+import "@/lib/i18n";
 
 const containerVariants = {
   hidden: {},
@@ -21,6 +23,7 @@ type Path = { language: string; objective: string; modules: PathModule[] };
 type Streak = { currentStreak: number; longestStreak: number };
 
 function DashboardInner() {
+  const { t } = useTranslation();
   const [streak, setStreak] = useState<Streak | null>(null);
   const [path, setPath] = useState<Path | null>(null);
   const [stats, setStats] = useState<Overview | null>(null);
@@ -41,12 +44,12 @@ function DashboardInner() {
       className="px-6 py-8 max-w-3xl mx-auto w-full"
     >
       <motion.h1 variants={itemVariants} className="font-display text-3xl text-foreground mb-1">
-        LearnIt!
+        {t("dashboard.title")}
       </motion.h1>
       <motion.p variants={itemVariants} className="text-muted-foreground mb-8">
         {streak && streak.currentStreak > 0
-          ? `${streak.currentStreak} day streak. Keep going.`
-          : "Welcome back. Keep the momentum going."}
+          ? t("dashboard.streak", { count: streak.currentStreak })
+          : t("dashboard.welcomeBack")}
       </motion.p>
 
       <motion.div
@@ -58,7 +61,7 @@ function DashboardInner() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-xs text-muted-foreground uppercase tracking-widest">
                 <Flame size={14} className="text-accent" />
-                Streak
+                {t("dashboard.streakLabel")}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -66,7 +69,7 @@ function DashboardInner() {
                 {streak?.currentStreak ?? 0}
               </p>
               <p className="text-muted-foreground text-sm mt-2">
-                days &middot; longest: {streak?.longestStreak ?? 0}
+                {t("dashboard.daysLongest", { count: streak?.longestStreak ?? 0 })}
               </p>
             </CardContent>
           </Card>
@@ -76,7 +79,7 @@ function DashboardInner() {
           <Card className="h-full flex flex-col">
             <CardHeader>
               <CardTitle className="text-xs text-muted-foreground uppercase tracking-widest">
-                Today
+                {t("dashboard.today")}
               </CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-3 flex-1">
@@ -85,11 +88,11 @@ function DashboardInner() {
                   {path.language} &middot; {path.objective}
                 </p>
               ) : (
-                <p className="text-muted-foreground text-sm">No path set yet.</p>
+                <p className="text-muted-foreground text-sm">{t("dashboard.noPathYet")}</p>
               )}
               <Button asChild className="mt-auto w-fit gap-2">
                 <a href={path ? "/learn" : "/goals"}>
-                  {path ? "Continue" : "Set a goal"}
+                  {path ? t("dashboard.continue") : t("dashboard.setGoal")}
                   <ArrowRight size={14} />
                 </a>
               </Button>
@@ -102,7 +105,7 @@ function DashboardInner() {
 
       {path && path.modules && (
         <motion.div variants={itemVariants}>
-          <h2 className="font-display text-xl text-foreground mb-4">Your Path</h2>
+          <h2 className="font-display text-xl text-foreground mb-4">{t("dashboard.yourPath")}</h2>
           <div className="space-y-3">
             {path.modules.map((mod, i) => (
               <Card key={i}>

@@ -14,6 +14,8 @@ import {
 } from "@/lib/api";
 import { toast } from "sonner";
 import { AuthGuard } from "@/components/AuthGuard";
+import { useTranslation } from "react-i18next";
+import "@/lib/i18n";
 
 const containerVariants = {
   hidden: {},
@@ -39,6 +41,7 @@ type VocabEntry = {
 };
 
 function VocabularyInner() {
+  const { t } = useTranslation();
   const [entries, setEntries] = useState<VocabEntry[]>([]);
   const [word, setWord] = useState("");
   const [meaning, setMeaning] = useState("");
@@ -54,7 +57,7 @@ function VocabularyInner() {
       const data = await getVocabulary();
       setEntries(data as unknown as VocabEntry[]);
     } catch {
-      toast.error("Failed to load vocabulary");
+      toast.error(t("vocabulary.toastLoadError"));
     }
   }, []);
 
@@ -73,7 +76,7 @@ function VocabularyInner() {
 
   const handleAdd = async () => {
     if (!word.trim() || !meaning.trim()) {
-      toast.error("Word and meaning are required");
+      toast.error(t("vocabulary.toastWordMeaningRequired"));
       return;
     }
     setAdding(true);
@@ -87,7 +90,7 @@ function VocabularyInner() {
       setEntries((prev) => [saved, ...prev]);
       setWord("");
       setMeaning("");
-      toast.success("Word saved");
+      toast.success(t("vocabulary.toastWordSaved"));
 
       // Enrich in background — best-effort, word is already persisted
       setEnrichingId(saved._id);
@@ -107,7 +110,7 @@ function VocabularyInner() {
         setEnrichingId(null);
       }
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Failed to save");
+      toast.error(e instanceof Error ? e.message : t("vocabulary.toastSaveError"));
     } finally {
       setAdding(false);
     }
@@ -117,9 +120,9 @@ function VocabularyInner() {
     try {
       await deleteVocabulary(id);
       setEntries((prev) => prev.filter((e) => e._id !== id));
-      toast.success("Deleted");
+      toast.success(t("vocabulary.toastDeleted"));
     } catch {
-      toast.error("Failed to delete");
+      toast.error(t("vocabulary.toastDeleteError"));
     }
   };
 
@@ -136,7 +139,7 @@ function VocabularyInner() {
         prev.map((e) => (e._id === entry._id ? { ...e, ...enrichment } : e)),
       );
     } catch {
-      toast.error("Failed to enrich");
+      toast.error(t("vocabulary.toastEnrichError"));
     } finally {
       setEnrichingId(null);
     }
@@ -161,41 +164,41 @@ function VocabularyInner() {
       className="px-6 py-8 max-w-3xl mx-auto w-full"
     >
       <motion.h1 variants={itemVariants} className="font-display text-3xl text-foreground mb-2">
-        Vocabulary
+        {t("vocabulary.title")}
       </motion.h1>
       <motion.p variants={itemVariants} className="text-muted-foreground mb-8">
-        Save words you encounter during your learning.
+        {t("vocabulary.subtitle")}
       </motion.p>
 
       <motion.div variants={itemVariants}>
         <Card className="mb-6">
           <CardHeader>
-            <CardTitle className="text-sm">Add a word</CardTitle>
+            <CardTitle className="text-sm">{t("vocabulary.addWord")}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Language</label>
+              <label className="text-xs text-muted-foreground mb-1 block">{t("vocabulary.languageLabel")}</label>
               <Input
-                placeholder="e.g., German, Japanese, French"
+                placeholder={t("vocabulary.languagePlaceholder")}
                 value={language}
                 onChange={(e) => setLanguage(e.target.value)}
               />
             </div>
             <Input
-              placeholder="Word or phrase"
+              placeholder={t("vocabulary.wordPlaceholder")}
               value={word}
               onChange={(e) => setWord(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleAdd()}
             />
             <Input
-              placeholder="Meaning"
+              placeholder={t("vocabulary.meaningPlaceholder")}
               value={meaning}
               onChange={(e) => setMeaning(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleAdd()}
             />
             <Button onClick={handleAdd} disabled={adding} className="w-full gap-2">
               <Plus size={16} />
-              {adding ? "Saving..." : "Save Word"}
+              {adding ? t("common.saving") : t("vocabulary.saveWord")}
             </Button>
           </CardContent>
         </Card>
@@ -227,7 +230,7 @@ function VocabularyInner() {
             className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
           />
           <Input
-            placeholder="Search vocabulary..."
+            placeholder={t("vocabulary.searchPlaceholder")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9"
@@ -248,8 +251,8 @@ function VocabularyInner() {
             <BookOpen size={40} className="mx-auto mb-3 text-muted-foreground" />
             <p className="text-muted-foreground text-sm">
               {entries.length === 0
-                ? "No words saved yet. Add your first one above."
-                : "No matches found."}
+                ? t("vocabulary.emptyNoWords")
+                : t("vocabulary.emptyNoMatches")}
             </p>
           </motion.div>
         )}
@@ -282,7 +285,7 @@ function VocabularyInner() {
                           {enrichingId === entry._id && (
                             <span className="flex items-center gap-1 text-xs text-muted-foreground shrink-0">
                               <Loader2 size={11} className="animate-spin" />
-                              Generating...
+                              {t("vocabulary.generating")}
                             </span>
                           )}
                         </div>
@@ -317,14 +320,14 @@ function VocabularyInner() {
                         onClick={() => handleReenrich(entry)}
                         disabled={enrichingId === entry._id}
                         className="p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-secondary disabled:opacity-40"
-                        title="Re-enrich"
+                        title={t("vocabulary.reEnrich")}
                       >
                         <RefreshCw size={13} />
                       </button>
                       <button
                         onClick={() => handleDelete(entry._id)}
                         className="p-2 text-muted-foreground hover:text-red-400 rounded-lg hover:bg-red-500/5"
-                        title="Delete"
+                        title={t("common.delete")}
                       >
                         <Trash2 size={14} />
                       </button>

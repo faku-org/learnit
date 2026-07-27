@@ -53,6 +53,9 @@ import { FeedbackModal } from "@/components/FeedbackModal";
 import { LessonSummary } from "@/components/LessonSummary";
 import { SectionSummary } from "@/components/SectionSummary";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
+import "@/lib/i18n";
+import { EXERCISE_TYPE_KEYS } from "@/lib/exerciseTypes";
 
 const QUEUE_SIZE = 2;
 const CORRECT_TO_ADVANCE = 3;
@@ -140,6 +143,7 @@ function advanceTopic(progress: Progress, modules: RoadmapModule[]): Progress {
 }
 
 function LearnInner() {
+  const { t } = useTranslation();
   const [exercise, setExercise] = useState<Exercise | null>(null);
   const [prevExercise, setPrevExercise] = useState<Exercise | null>(null);
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
@@ -385,7 +389,7 @@ function LearnInner() {
         }
       } catch {
         setHydrationError(true);
-        toast.error("Couldn't prepare that module.");
+        toast.error(t("learn.toastModulePrepFailed"));
       } finally {
         hydratingRef.current.delete(moduleIdx);
         setHydratingModules([...hydratingRef.current]);
@@ -449,7 +453,7 @@ function LearnInner() {
       const data = await getNextExercise(params);
       setExercise(data as unknown as Exercise);
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Failed to load exercise");
+      toast.error(e instanceof Error ? e.message : t("learn.toastLoadError"));
     } finally {
       setLoading(false);
     }
@@ -574,7 +578,7 @@ function LearnInner() {
         topicName: ref?.topicName,
         moduleName: ref?.moduleName,
       }).catch(() => null);
-      if (result?.points) toast.success(`+${result.points} points`);
+      if (result?.points) toast.success(t("learn.toastPointsEarned", { points: result.points }));
       return { ref, result };
     },
     [resolveTopicRef],
@@ -643,7 +647,7 @@ function LearnInner() {
       });
       setDetailedExpl(result);
     } catch {
-      toast.error("Failed to generate explanation");
+      toast.error(t("learn.toastExplainError"));
     } finally {
       setExplaining(false);
     }
@@ -686,7 +690,7 @@ function LearnInner() {
         meaning: wm.meaning,
         language: currentPath?.language ?? "",
       }) as unknown as { _id: string };
-      toast.success(`Saved "${wordToSave}" to vocabulary`);
+      toast.success(t("learn.toastWordSaved", { word: wordToSave }));
       enrichVocabulary(saved._id, {
         word: wordToSave,
         meaning: wm.meaning,
@@ -694,7 +698,7 @@ function LearnInner() {
         nativeLanguage,
       }).catch(() => {});
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to save word");
+      toast.error(e instanceof Error ? e.message : t("learn.toastSaveWordError"));
     } finally {
       setSavingWord(null);
     }
@@ -789,10 +793,10 @@ function LearnInner() {
         <div className="max-w-2xl mx-auto w-full">
           <motion.div variants={itemVariants} className="flex items-start justify-between mb-2">
             <div>
-              <h1 className="font-display text-3xl text-foreground">Learn</h1>
+              <h1 className="font-display text-3xl text-foreground">{t("learn.title")}</h1>
               {currentTopicName && (
                 <p className="text-muted-foreground text-sm mt-1">
-                  Practicing:{" "}
+                  {t("learn.practicing")}
                   <span className="text-foreground font-medium">{currentTopicName}</span>
                 </p>
               )}
@@ -803,7 +807,7 @@ function LearnInner() {
                 className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mt-1"
               >
                 <Map size={13} />
-                {showRoadmap ? "Hide map" : "Show map"}
+                {showRoadmap ? t("learn.hideMap") : t("learn.showMap")}
               </button>
             )}
           </motion.div>
@@ -815,7 +819,7 @@ function LearnInner() {
             >
               <Check size={14} className="text-accent shrink-0" />
               <p className="text-sm text-accent">
-                Topic complete! Moving to{" "}
+                {t("learn.topicComplete")}
                 <span className="font-medium">{currentTopicName}</span>.
               </p>
             </motion.div>
@@ -832,14 +836,16 @@ function LearnInner() {
                   )}
                   <div>
                     <p className="text-foreground font-medium">
-                      {hydrationError ? "Couldn't design " : "Designing "}
-                      {currentPath?.modules[progress?.currentModuleIndex ?? 0]?.name ??
-                        "your next module"}
+                      {t(hydrationError ? "learn.moduleDesignFailed" : "learn.moduleDesigning", {
+                        module:
+                          currentPath?.modules[progress?.currentModuleIndex ?? 0]?.name ??
+                          t("learn.yourNextModule"),
+                      })}
                     </p>
                     <p className="text-sm text-muted-foreground mt-1 max-w-sm">
                       {hydrationError
-                        ? "The lesson plan for this module didn't generate. Give it another go."
-                        : "This module is being written around how you've actually been doing, so it lands at the right difficulty."}
+                        ? t("learn.moduleDesignFailedDesc")
+                        : t("learn.moduleDesigningDesc")}
                     </p>
                   </div>
                   {hydrationError && progress && (
@@ -848,7 +854,7 @@ function LearnInner() {
                       className="gap-2"
                     >
                       <RefreshCw size={14} />
-                      Try again
+                      {t("common.tryAgain")}
                     </Button>
                   )}
                 </CardContent>
@@ -863,12 +869,12 @@ function LearnInner() {
                   <BookOpen size={48} className="text-muted-foreground" />
                   <p className="text-muted-foreground">
                     {currentTopicName
-                      ? `Ready to practice ${currentTopicName}?`
-                      : "Ready to practice?"}
+                      ? t("learn.readyPracticeTopic", { topic: currentTopicName })
+                      : t("learn.readyPractice")}
                   </p>
                   <Button onClick={fetchExercise} size="lg" className="gap-2">
                     <Shuffle size={16} />
-                    Start Exercise
+                    {t("learn.startExercise")}
                   </Button>
                   {prevExercise && (
                     <Button
@@ -878,7 +884,7 @@ function LearnInner() {
                       className="gap-1.5 text-muted-foreground mt-1"
                     >
                       <ArrowLeft size={14} />
-                      Resume previous exercise
+                      {t("learn.resumePrevious")}
                     </Button>
                   )}
                 </CardContent>
@@ -889,7 +895,7 @@ function LearnInner() {
           {loading && (
             <motion.div variants={itemVariants} className="text-center py-12">
               <Loader2 className="animate-spin mx-auto mb-4 text-accent" size={32} />
-              <p className="text-muted-foreground">Loading exercise...</p>
+              <p className="text-muted-foreground">{t("learn.loadingExercise")}</p>
             </motion.div>
           )}
 
@@ -911,7 +917,7 @@ function LearnInner() {
                           {exercise.icon && (
                             <ExerciseIcon name={exercise.icon} size={13} className="text-accent/70 shrink-0" />
                           )}
-                          {exercise.type.replace(/_/g, " ")}
+                          {EXERCISE_TYPE_KEYS[exercise.type] ? t(EXERCISE_TYPE_KEYS[exercise.type]) : exercise.type.replace(/_/g, " ")}
                         </span>
                         <span className="flex items-center gap-2 normal-case font-normal">
                           {currentTopicName && (
@@ -924,7 +930,7 @@ function LearnInner() {
                             <div className="relative">
                               <button
                                 onClick={() => setShowWordMenu((v) => !v)}
-                                title="Save a word to vocabulary"
+                                title={t("learn.saveToVocabulary")}
                                 className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
                                 disabled={!!savingWord}
                               >
@@ -937,7 +943,7 @@ function LearnInner() {
                               {showWordMenu && (
                                 <div className="absolute right-0 top-full mt-1 z-50 bg-card border border-border rounded-lg shadow-lg py-1 min-w-52">
                                   <p className="px-3 pt-1 pb-1.5 text-[10px] text-muted-foreground border-b border-border mb-1">
-                                    Save to vocabulary
+                                    {t("learn.saveToVocabulary")}
                                   </p>
                                   {exercise.wordMeanings.map((wm, i) => (
                                     <button
@@ -1006,7 +1012,7 @@ function LearnInner() {
                                       <button
                                         onClick={() => speakText(speakableText, langCode)}
                                         className="text-muted-foreground hover:text-foreground transition-colors rounded-lg p-1.5 hover:bg-secondary"
-                                        title="Listen to phrase"
+                                        title={t("learn.listenToPhrase")}
                                       >
                                         <Volume2 size={16} />
                                       </button>
@@ -1015,7 +1021,7 @@ function LearnInner() {
                                       onClick={handleTranslatePhrase}
                                       disabled={phraseTranslating}
                                       className="text-muted-foreground hover:text-foreground transition-colors rounded-lg p-1.5 hover:bg-secondary disabled:opacity-50"
-                                      title="Translate phrase"
+                                      title={t("learn.translatePhrase")}
                                     >
                                       <Languages size={16} />
                                     </button>
@@ -1063,7 +1069,7 @@ function LearnInner() {
                           <div className="min-h-14 flex flex-wrap items-center gap-2 p-3 rounded-lg border border-dashed border-border bg-secondary/30">
                             {selectedWordIndices.length === 0 && (
                               <span className="text-xs text-muted-foreground">
-                                Tap words below to build the sentence
+                                {t("learn.tapWordsToBuild")}
                               </span>
                             )}
                             {selectedWordIndices.map((idx, pos) => (
@@ -1175,20 +1181,20 @@ function LearnInner() {
                             value={textAnswer}
                             onChange={(e) => setTextAnswer(e.target.value)}
                             disabled={submitted}
-                            placeholder="Type your answer..."
+                            placeholder={t("learn.typeAnswerPlaceholder")}
                             className="w-full p-3 rounded-lg border border-border bg-card text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary disabled:opacity-50 text-sm"
                             onKeyDown={(e) => e.key === "Enter" && canSubmit && handleSubmit()}
                           />
                         )}
 
                       {exercise.hint && !submitted && !gaveUp && (
-                        <p className="text-xs text-muted-foreground">Hint: {exercise.hint}</p>
+                        <p className="text-xs text-muted-foreground">{t("learn.hintLabel", { hint: exercise.hint })}</p>
                       )}
 
                       {!submitted && !gaveUp && (
                         <div className="flex gap-2 items-center">
                           <Button onClick={handleSubmit} disabled={!canSubmit} className="flex-1">
-                            Check Answer
+                            {t("learn.checkAnswer")}
                           </Button>
                           <Button
                             onClick={handleGiveUp}
@@ -1196,13 +1202,13 @@ function LearnInner() {
                             className="text-muted-foreground gap-1.5 shrink-0"
                           >
                             <HelpCircle size={14} />
-                            I don't know
+                            {t("learn.dontKnow")}
                           </Button>
                           <Button
                             onClick={handleRetryLater}
                             variant="ghost"
                             className="text-muted-foreground gap-1.5 shrink-0"
-                            title="Skip and practice later"
+                            title={t("learn.skipForLater")}
                           >
                             <SkipForward size={14} />
                           </Button>
@@ -1218,22 +1224,24 @@ function LearnInner() {
                             ].join(" ")}
                           >
                             {correct ? <Check size={16} /> : <X size={16} />}
-                            <span className="text-sm">{correct ? "Correct!" : "Not quite"}</span>
+                            <span className="text-sm">{correct ? t("learn.correct") : t("learn.notQuite")}</span>
                             {correct && progress && (
                               <span className="text-xs opacity-70 ml-auto">
-                                {Math.min(
-                                  (progress.topicStats[
-                                    `${progress.currentModuleIndex}-${progress.currentTopicIndex}`
-                                  ]?.correct ?? 1),
-                                  CORRECT_TO_ADVANCE,
-                                )}
-                                /{CORRECT_TO_ADVANCE} to unlock next
+                                {t("learn.toUnlockNext", {
+                                  count: Math.min(
+                                    (progress.topicStats[
+                                      `${progress.currentModuleIndex}-${progress.currentTopicIndex}`
+                                    ]?.correct ?? 1),
+                                    CORRECT_TO_ADVANCE,
+                                  ),
+                                  total: CORRECT_TO_ADVANCE,
+                                })}
                               </span>
                             )}
                           </div>
                           {!correct && exercise.correctAnswer && (
                             <p className="text-sm">
-                              <span className="text-muted-foreground">Answer: </span>
+                              <span className="text-muted-foreground">{t("learn.answerLabel")}</span>
                               <span className="text-accent">{exercise.correctAnswer}</span>
                             </p>
                           )}
@@ -1243,7 +1251,7 @@ function LearnInner() {
                           <div className="flex gap-2">
                             <Button onClick={fetchExercise} variant="outline" className="flex-1 gap-2">
                               <RefreshCw size={14} />
-                              Next Exercise
+                              {t("learn.nextExercise")}
                             </Button>
                             {prevExercise && (
                               <Button
@@ -1252,7 +1260,7 @@ function LearnInner() {
                                 className="gap-1.5 text-muted-foreground shrink-0"
                               >
                                 <ArrowLeft size={14} />
-                                Previous
+                                {t("common.previous")}
                               </Button>
                             )}
                           </div>
@@ -1264,18 +1272,18 @@ function LearnInner() {
                           {explaining && (
                             <div className="text-center py-6">
                               <Loader2 className="animate-spin mx-auto mb-3 text-accent" size={22} />
-                              <p className="text-xs text-muted-foreground">Generating explanation...</p>
+                              <p className="text-xs text-muted-foreground">{t("learn.generatingExplanation")}</p>
                             </div>
                           )}
                           {detailedExpl && !explaining && (
                             <>
                               <div className="p-3 rounded-lg bg-accent/10">
-                                <p className="text-xs text-muted-foreground mb-1">Correct answer</p>
+                                <p className="text-xs text-muted-foreground mb-1">{t("learn.correctAnswerLabel")}</p>
                                 <p className="text-accent font-medium">{detailedExpl.correctAnswer}</p>
                               </div>
                               {detailedExpl.keyPoints.length > 0 && (
                                 <div>
-                                  <p className="text-xs text-muted-foreground mb-2">Key points</p>
+                                  <p className="text-xs text-muted-foreground mb-2">{t("learn.keyPoints")}</p>
                                   <ul className="space-y-1.5">
                                     {detailedExpl.keyPoints.map((pt, i) => (
                                       <li key={i} className="flex items-start gap-2 text-sm">
@@ -1289,14 +1297,14 @@ function LearnInner() {
                               <p className="text-sm text-muted-foreground">{detailedExpl.explanation}</p>
                               {detailedExpl.example && (
                                 <div className="p-3 rounded-lg bg-secondary">
-                                  <p className="text-xs text-muted-foreground mb-1">Example</p>
+                                  <p className="text-xs text-muted-foreground mb-1">{t("learn.example")}</p>
                                   <p className="text-sm text-foreground">{detailedExpl.example}</p>
                                 </div>
                               )}
                               <div className="flex gap-2">
                                 <Button onClick={fetchExercise} variant="outline" className="flex-1 gap-2">
                                   <RefreshCw size={14} />
-                                  Continue
+                                  {t("learn.continue")}
                                 </Button>
                                 {prevExercise && (
                                   <Button
@@ -1305,7 +1313,7 @@ function LearnInner() {
                                     className="gap-1.5 text-muted-foreground shrink-0"
                                   >
                                     <ArrowLeft size={14} />
-                                    Previous
+                                    {t("common.previous")}
                                   </Button>
                                 )}
                               </div>

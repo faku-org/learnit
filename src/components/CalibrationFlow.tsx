@@ -10,6 +10,8 @@ import {
   type CalibrationQuestion,
 } from "@/lib/api";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
+import "@/lib/i18n";
 
 const containerVariants = {
   hidden: {},
@@ -21,33 +23,41 @@ const itemVariants = {
 };
 
 type ProjectionAnswers = {
+  motivation?: string;
   dailyTime: string;
   priorExposure: string;
   selfRating: string;
 };
 
+const MOTIVATIONS = [
+  { value: "travel", labelKey: "calibration.motivationTravel" },
+  { value: "work", labelKey: "calibration.motivationWork" },
+  { value: "culture", labelKey: "calibration.motivationCulture" },
+  { value: "personal", labelKey: "calibration.motivationPersonal" },
+];
+
 const DAILY_TIMES = [
-  { value: "5-10", label: "5–10 min / day" },
-  { value: "15-30", label: "15–30 min / day" },
-  { value: "30-60", label: "30–60 min / day" },
-  { value: "60+", label: "1 hour+ / day" },
+  { value: "5-10", labelKey: "calibration.dailyTime5_10" },
+  { value: "15-30", labelKey: "calibration.dailyTime15_30" },
+  { value: "30-60", labelKey: "calibration.dailyTime30_60" },
+  { value: "60+", labelKey: "calibration.dailyTime60Plus" },
 ];
 
 const PRIOR_EXPOSURES = [
-  { value: "none", label: "Never studied it" },
-  { value: "little", label: "A few words/phrases" },
-  { value: "some", label: "Basics (greetings, numbers, colors)" },
-  { value: "more", label: "Simple sentences and conversations" },
+  { value: "none", labelKey: "calibration.priorNone" },
+  { value: "little", labelKey: "calibration.priorLittle" },
+  { value: "some", labelKey: "calibration.priorSome" },
+  { value: "more", labelKey: "calibration.priorMore" },
 ];
 
 // Self-qualification, in the student's own words. Indices line up 1:1 with
 // CalibrationLevel (see CALIBRATION_LEVEL_INDEX) so the result can be compared
 // directly against what the placement test measures.
 const SELF_RATINGS = [
-  { value: "poor", label: "Not good, honestly" },
-  { value: "okay", label: "Okay, I get by" },
-  { value: "good", label: "Pretty good" },
-  { value: "great", label: "Very good / fluent" },
+  { value: "poor", labelKey: "calibration.selfRatingPoor" },
+  { value: "okay", labelKey: "calibration.selfRatingOkay" },
+  { value: "good", labelKey: "calibration.selfRatingGood" },
+  { value: "great", labelKey: "calibration.selfRatingGreat" },
 ];
 
 // ── Adaptive ladder ───────────────────────────────────────────────────────────
@@ -149,30 +159,18 @@ function compareSelfAssessment(selfRating: string, level: CalibrationLevel): Sel
   return "matched";
 }
 
-const LEVEL_LABELS: Record<CalibrationLevel, { label: string; description: string }> = {
-  complete_beginner: {
-    label: "Complete Beginner",
-    description: "Your path starts from zero — alphabet, basic phrases, and core vocabulary.",
-  },
-  some_basics: {
-    label: "Some Basics",
-    description: "You know a few things. Your path skips absolute basics and focuses on building structure.",
-  },
-  elementary: {
-    label: "Elementary",
-    description: "Solid foundation. Your path jumps into grammar patterns and practical sentences.",
-  },
-  intermediate: {
-    label: "Intermediate",
-    description: "You already have foundations. Your path focuses on fluency and complex structures.",
-  },
+const LEVEL_KEYS: Record<CalibrationLevel, string> = {
+  complete_beginner: "completeBeginner",
+  some_basics: "someBasics",
+  elementary: "elementary",
+  intermediate: "intermediate",
 };
 
-const PROBE_LABELS: Record<CalibrationProbeLevel, string> = {
-  beginner: "Beginner",
-  elementary: "Elementary",
-  intermediate: "Intermediate",
-  advanced: "Advanced",
+const PROBE_LEVEL_KEYS: Record<CalibrationProbeLevel, string> = {
+  beginner: "beginner",
+  elementary: "elementary",
+  intermediate: "intermediate",
+  advanced: "advanced",
 };
 
 type Step = "projection" | "quiz" | "adapting" | "result";
@@ -185,6 +183,7 @@ type Props = {
 };
 
 export function CalibrationFlow({ language, nativeLanguage = "english", onComplete, onSkip }: Props) {
+  const { t } = useTranslation();
   const [step, setStep] = useState<Step>("projection");
   const [projection, setProjection] = useState<Partial<ProjectionAnswers>>({});
   const [loading, setLoading] = useState(false);
@@ -230,7 +229,7 @@ export function CalibrationFlow({ language, nativeLanguage = "english", onComple
       setStep("quiz");
       return true;
     } catch {
-      toast.error("Failed to generate calibration questions. Try again.");
+      toast.error(t("calibration.toastQuizError"));
       setStep(nextStage === 1 ? "projection" : "quiz");
       return false;
     } finally {
@@ -313,7 +312,8 @@ export function CalibrationFlow({ language, nativeLanguage = "english", onComple
     level && projection.selfRating
       ? compareSelfAssessment(projection.selfRating, level)
       : null;
-  const selfRatingLabel = SELF_RATINGS.find((r) => r.value === projection.selfRating)?.label;
+  const selfRatingKey = SELF_RATINGS.find((r) => r.value === projection.selfRating)?.labelKey;
+  const selfRatingLabel = selfRatingKey ? t(selfRatingKey) : undefined;
 
   return (
     <div className="space-y-4">
@@ -330,26 +330,30 @@ export function CalibrationFlow({ language, nativeLanguage = "english", onComple
           >
             <motion.div variants={itemVariants}>
               <p className="text-sm text-muted-foreground mb-1">
-                A few quick questions to personalize your {language} path.
+                {t("calibration.personalize", { language })}
               </p>
             </motion.div>
 
             <ProjectionSection
-              title="How much time can you dedicate daily?"
+              title={t("calibration.whyLearning")}
+              options={MOTIVATIONS}
+              value={projection.motivation}
+              onChange={(v) => setProjection((p) => ({ ...p, motivation: v }))}
+            />
+            <ProjectionSection
+              title={t("calibration.dailyTimeQuestion")}
               options={DAILY_TIMES}
               value={projection.dailyTime}
               onChange={(v) => setProjection((p) => ({ ...p, dailyTime: v }))}
             />
             <ProjectionSection
-              title="Prior exposure to {language}?"
-              titleLanguage={language}
+              title={t("calibration.priorExposureQuestion", { language })}
               options={PRIOR_EXPOSURES}
               value={projection.priorExposure}
               onChange={(v) => setProjection((p) => ({ ...p, priorExposure: v }))}
             />
             <ProjectionSection
-              title="Be honest — how would you rate your {language}?"
-              titleLanguage={language}
+              title={t("calibration.selfRatingQuestion", { language })}
               options={SELF_RATINGS}
               value={projection.selfRating}
               onChange={(v) => setProjection((p) => ({ ...p, selfRating: v }))}
@@ -366,10 +370,10 @@ export function CalibrationFlow({ language, nativeLanguage = "english", onComple
                 ) : (
                   <ChevronRight size={15} />
                 )}
-                {loading ? "Building your quiz..." : "Take calibration quiz"}
+                {loading ? t("calibration.loadingQuiz") : t("calibration.takeQuiz")}
               </Button>
               <Button variant="ghost" onClick={onSkip} className="text-muted-foreground shrink-0">
-                Skip
+                {t("common.skip")}
               </Button>
             </motion.div>
           </motion.div>
@@ -392,17 +396,17 @@ export function CalibrationFlow({ language, nativeLanguage = "english", onComple
                     {direction === "down" && <TrendingDown size={14} className="text-primary" />}
                     {direction === "same" && <Minus size={14} className="text-muted-foreground" />}
                     {direction === "up"
-                      ? "Stepping the difficulty up"
+                      ? t("calibration.adaptingUp")
                       : direction === "down"
-                        ? "Stepping the difficulty down"
+                        ? t("calibration.adaptingDown")
                         : direction === "same"
-                          ? "Confirming your level"
-                          : "Building your calibration quiz"}
+                          ? t("calibration.adaptingSame")
+                          : t("calibration.adaptingInitial")}
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
                     {direction
-                      ? "Writing fresh questions based on how you just did."
-                      : "Writing a fresh set of questions."}
+                      ? t("calibration.adaptingSubtitle")
+                      : t("calibration.adaptingSubtitleInitial")}
                   </p>
                 </div>
               </CardContent>
@@ -422,10 +426,9 @@ export function CalibrationFlow({ language, nativeLanguage = "english", onComple
           >
             <motion.div variants={itemVariants} className="flex items-center justify-between">
               <p className="text-xs text-muted-foreground uppercase tracking-widest">
-                Stage {stage}
-                <span className="text-muted-foreground/50"> / {MAX_STAGES}</span>
+                {t("calibration.stageCounter", { stage, total: MAX_STAGES })}
                 <span className="text-primary ml-2 normal-case tracking-normal">
-                  {PROBE_LABELS[probeLevel]}
+                  {t(`calibration.probeLevels.${PROBE_LEVEL_KEYS[probeLevel]}`)}
                 </span>
               </p>
               <div className="flex gap-1">
@@ -476,10 +479,10 @@ export function CalibrationFlow({ language, nativeLanguage = "english", onComple
                       ].join(" ")}
                     >
                       {selectedOption === questions[currentQ].correctIndex
-                        ? "Correct!"
+                        ? t("calibration.answerCorrect")
                         : selectedOption === null
-                          ? "You said: I don't know — marked as wrong."
-                          : "Not quite — here's the correct answer."}
+                          ? t("calibration.answerDontKnow")
+                          : t("calibration.answerWrong")}
                     </p>
                   )}
 
@@ -517,7 +520,7 @@ export function CalibrationFlow({ language, nativeLanguage = "english", onComple
                           {gotItRight && <Check size={14} />}
                           {shownAsAnswer && (
                             <span className="text-[10px] uppercase tracking-wide text-accent/70 shrink-0">
-                              Correct answer
+                              {t("calibration.correctAnswerBadge")}
                             </span>
                           )}
                         </button>
@@ -532,14 +535,14 @@ export function CalibrationFlow({ language, nativeLanguage = "english", onComple
                         disabled={selectedOption === null}
                         className="flex-1"
                       >
-                        Confirm
+                        {t("common.confirm")}
                       </Button>
                       <Button
                         onClick={dontKnow}
                         variant="ghost"
                         className="text-muted-foreground shrink-0"
                       >
-                        I don't know
+                        {t("calibration.dontKnow")}
                       </Button>
                     </div>
                   ) : (
@@ -548,7 +551,7 @@ export function CalibrationFlow({ language, nativeLanguage = "english", onComple
                         <Loader2 size={14} className="animate-spin" />
                       ) : (
                         <>
-                          {currentQ + 1 >= questions.length ? "Finish stage" : "Next"}
+                          {currentQ + 1 >= questions.length ? t("calibration.seeResults") : t("common.next")}
                           <ChevronRight size={14} />
                         </>
                       )}
@@ -574,23 +577,23 @@ export function CalibrationFlow({ language, nativeLanguage = "english", onComple
               <Card className="border-accent/30 bg-accent/5">
                 <CardContent className="pt-5 space-y-2">
                   <p className="text-xs text-accent uppercase tracking-widest font-semibold">
-                    Calibration complete
+                    {t("calibration.calibrationComplete")}
                   </p>
                   <p className="text-xl font-display text-foreground">
-                    {LEVEL_LABELS[level].label}
+                    {t(`calibration.levels.${LEVEL_KEYS[level]}.label`)}
                   </p>
                   <p className="text-sm text-muted-foreground">
-                    {LEVEL_LABELS[level].description}
+                    {t(`calibration.levels.${LEVEL_KEYS[level]}.description`)}
                   </p>
 
                   <div className="pt-2 space-y-1">
                     {stages.map((s, i) => (
                       <div key={i} className="flex items-center gap-2 text-xs">
                         <span className="text-muted-foreground/50 w-12 shrink-0">
-                          Stage {i + 1}
+                          {t("calibration.stageLabel", { stage: i + 1 })}
                         </span>
                         <span className="text-muted-foreground flex-1">
-                          {PROBE_LABELS[s.probeLevel]}
+                          {t(`calibration.probeLevels.${PROBE_LEVEL_KEYS[s.probeLevel]}`)}
                         </span>
                         <span
                           className={
@@ -608,7 +611,7 @@ export function CalibrationFlow({ language, nativeLanguage = "english", onComple
                   </div>
 
                   <div className="pt-1 text-xs text-muted-foreground/60">
-                    {totalCorrect} / {totalAsked} correct overall
+                    {t("calibration.correctCount", { correct: totalCorrect, total: totalAsked })}
                   </div>
                 </CardContent>
               </Card>
@@ -628,17 +631,11 @@ export function CalibrationFlow({ language, nativeLanguage = "english", onComple
                       <TrendingDown size={15} className="text-primary shrink-0 mt-0.5" />
                     )}
                     <p className="text-xs text-muted-foreground leading-relaxed">
-                      You rated yourself{" "}
-                      <span className="text-foreground font-medium">
-                        "{selfRatingLabel.toLowerCase()}"
-                      </span>
-                      .{" "}
-                      {selfAssessment === "matched" &&
-                        "Spot on — that's exactly what the test found."}
-                      {selfAssessment === "underestimated" &&
-                        "You're actually further along than that — nice."}
-                      {selfAssessment === "overestimated" &&
-                        "The test placed you a bit earlier — that gap is exactly what this path will close."}
+                      {t("calibration.selfRatedPrefix")}{" "}
+                      <span className="text-foreground font-medium">"{selfRatingLabel}"</span>.{" "}
+                      {selfAssessment === "matched" && t("calibration.selfMatchedMsg")}
+                      {selfAssessment === "underestimated" && t("calibration.selfUnderestimatedMsg")}
+                      {selfAssessment === "overestimated" && t("calibration.selfOverestimatedMsg")}
                     </p>
                   </CardContent>
                 </Card>
@@ -651,14 +648,14 @@ export function CalibrationFlow({ language, nativeLanguage = "english", onComple
                 className="flex-1 gap-2"
               >
                 <Check size={14} />
-                Generate my path
+                {t("calibration.generatePath")}
               </Button>
               <Button
                 variant="ghost"
                 onClick={() => startQuiz(true)}
                 disabled={loading}
                 className="text-muted-foreground gap-1.5 shrink-0"
-                title="Redo quiz with new questions"
+                title={t("calibration.redoTitle")}
               >
                 {loading ? <Loader2 size={13} className="animate-spin" /> : <RotateCcw size={13} />}
               </Button>
@@ -672,17 +669,16 @@ export function CalibrationFlow({ language, nativeLanguage = "english", onComple
 
 type ProjectionSectionProps = {
   title: string;
-  titleLanguage?: string;
-  options: { value: string; label: string }[];
+  options: { value: string; labelKey: string }[];
   value: string | undefined;
   onChange: (v: string) => void;
 };
 
-function ProjectionSection({ title, titleLanguage, options, value, onChange }: ProjectionSectionProps) {
-  const displayTitle = titleLanguage ? title.replace("{language}", titleLanguage) : title;
+function ProjectionSection({ title, options, value, onChange }: ProjectionSectionProps) {
+  const { t } = useTranslation();
   return (
     <motion.div variants={itemVariants} className="space-y-2">
-      <p className="text-sm font-medium text-foreground">{displayTitle}</p>
+      <p className="text-sm font-medium text-foreground">{title}</p>
       <div className="grid grid-cols-2 gap-2">
         {options.map((opt) => (
           <button
@@ -695,7 +691,7 @@ function ProjectionSection({ title, titleLanguage, options, value, onChange }: P
                 : "border-border text-muted-foreground hover:border-primary/30 hover:text-foreground",
             ].join(" ")}
           >
-            {opt.label}
+            {t(opt.labelKey)}
           </button>
         ))}
       </div>
