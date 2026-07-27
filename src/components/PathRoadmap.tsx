@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from "motion/react";
 import { Check, ChevronRight, Lock, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Progress } from "@/lib/api";
+import { useTranslation } from "react-i18next";
+import "@/lib/i18n";
 
 type Topic = { name: string; order: number; description?: string };
 type Module = { name: string; order: number; topics?: Topic[] };
@@ -50,6 +52,7 @@ export function PathRoadmap({
   correctToAdvance,
   onTopicSelect,
 }: PathRoadmapProps) {
+  const { t } = useTranslation();
   const currentFlat = getFlatIndex(
     progress.currentModuleIndex,
     progress.currentTopicIndex,
@@ -77,13 +80,13 @@ export function PathRoadmap({
     <div className="flex flex-col gap-4">
       <div>
         <p className="text-xs font-medium text-muted-foreground uppercase tracking-widest mb-3">
-          {language} path
+          {t("roadmap.pathSuffix", { language })}
         </p>
 
         {currentModule && currentTopic && (
           <div className="px-2 py-2.5 rounded-lg bg-primary/10 border border-primary/20 mb-1">
             <p className="text-[10px] text-primary/70 uppercase tracking-wide font-medium mb-0.5">
-              Current stage
+              {t("roadmap.currentStage")}
             </p>
             <p className="text-sm font-medium text-foreground leading-tight">{currentTopic.name}</p>
             <p className="text-[11px] text-muted-foreground mt-0.5">{currentModule.name}</p>

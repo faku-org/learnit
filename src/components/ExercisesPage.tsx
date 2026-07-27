@@ -5,16 +5,19 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { getExercises } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
+import "@/lib/i18n";
+import { EXERCISE_TYPE_KEYS } from "@/lib/exerciseTypes";
 
 const PAGE_SIZE = 20;
 
 const TYPES = [
-  { value: "", label: "All types" },
-  { value: "multiple_choice", label: "Multiple choice" },
-  { value: "fill_blank", label: "Fill in blank" },
-  { value: "translation", label: "Translation" },
-  { value: "conjugation", label: "Conjugation" },
-  { value: "matching", label: "Matching" },
+  { value: "", labelKey: "exercises.typeAll" },
+  { value: "multiple_choice", labelKey: "exercises.typeMultipleChoice" },
+  { value: "fill_blank", labelKey: "exercises.typeFillBlank" },
+  { value: "translation", labelKey: "exercises.typeTranslation" },
+  { value: "conjugation", labelKey: "exercises.typeConjugation" },
+  { value: "matching", labelKey: "exercises.typeMatching" },
 ] as const;
 
 const TYPE_COLORS: Record<string, string> = {
@@ -48,9 +51,9 @@ const itemVariants = {
   show: { opacity: 1, y: 0, transition: { duration: 0.25, ease: "easeOut" as const } },
 };
 
-function formatDate(iso: string): string {
+function formatDate(iso: string, locale: string): string {
   try {
-    return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric" }).format(
+    return new Intl.DateTimeFormat(locale, { month: "short", day: "numeric", year: "numeric" }).format(
       new Date(iso),
     );
   } catch {
@@ -59,6 +62,7 @@ function formatDate(iso: string): string {
 }
 
 export function ExercisesPage() {
+  const { t, i18n } = useTranslation();
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
@@ -108,10 +112,10 @@ export function ExercisesPage() {
       className="px-6 py-8 max-w-3xl mx-auto w-full"
     >
       <motion.h1 variants={itemVariants} className="font-display text-3xl text-foreground mb-1">
-        Exercise History
+        {t("exercises.title")}
       </motion.h1>
       <motion.p variants={itemVariants} className="text-muted-foreground mb-6">
-        All exercises you've practiced. Search and filter to review.
+        {t("exercises.subtitle")}
       </motion.p>
 
       {/* Filters */}
@@ -122,7 +126,7 @@ export function ExercisesPage() {
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search by topic or keyword..."
+            placeholder={t("exercises.searchPlaceholder")}
             className="w-full pl-9 pr-9 py-2.5 rounded-lg border border-border bg-card text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary text-sm"
           />
           {query && (
@@ -136,21 +140,21 @@ export function ExercisesPage() {
         </div>
 
         <div className="flex gap-2 flex-wrap">
-          {TYPES.map((t) => (
+          {TYPES.map((type) => (
             <button
-              key={t.value}
+              key={type.value}
               onClick={() => {
-                setTypeFilter(t.value);
+                setTypeFilter(type.value);
                 setPage(1);
               }}
               className={cn(
                 "px-3 py-1 rounded-full text-xs transition-colors border",
-                typeFilter === t.value
+                typeFilter === type.value
                   ? "bg-primary text-primary-foreground border-primary"
                   : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/30",
               )}
             >
-              {t.label}
+              {t(type.labelKey)}
             </button>
           ))}
         </div>
@@ -158,7 +162,7 @@ export function ExercisesPage() {
 
       {/* Count */}
       <motion.p variants={itemVariants} className="text-xs text-muted-foreground mb-4">
-        {loading ? "Loading..." : `${total} exercise${total !== 1 ? "s" : ""}`}
+        {loading ? t("common.loading") : t("exercises.count", { count: total })}
       </motion.p>
 
       {/* List */}
@@ -173,8 +177,8 @@ export function ExercisesPage() {
           <BookOpen size={40} className="mx-auto text-muted-foreground mb-3" />
           <p className="text-muted-foreground text-sm">
             {debouncedQuery || typeFilter
-              ? "No exercises match your filters."
-              : "No exercises yet. Start practicing to build your history."}
+              ? t("exercises.noMatches")
+              : t("exercises.noneYet")}
           </p>
         </div>
       )}
@@ -206,7 +210,7 @@ export function ExercisesPage() {
                               TYPE_COLORS[ex.type] ?? "bg-secondary text-muted-foreground",
                             )}
                           >
-                            {ex.type.replace(/_/g, " ")}
+                            {t(EXERCISE_TYPE_KEYS[ex.type] ?? "exercises.typeAll")}
                           </span>
                           <span className="text-xs text-muted-foreground font-medium">
                             {ex.topic}
@@ -222,7 +226,7 @@ export function ExercisesPage() {
                             <p className="text-xs text-muted-foreground">{ex.instruction}</p>
                             {ex.correctAnswer && (
                               <p className="text-xs">
-                                <span className="text-muted-foreground">Answer: </span>
+                                <span className="text-muted-foreground">{t("exercises.answerLabel")}</span>
                                 <span className="text-accent">{ex.correctAnswer}</span>
                               </p>
                             )}
@@ -230,7 +234,7 @@ export function ExercisesPage() {
                         )}
                       </div>
                       <span className="text-[11px] text-muted-foreground shrink-0 pt-0.5">
-                        {formatDate(ex.createdAt)}
+                        {formatDate(ex.createdAt, i18n.resolvedLanguage ?? "en")}
                       </span>
                     </div>
                   </CardContent>
@@ -252,10 +256,10 @@ export function ExercisesPage() {
             className="gap-1.5"
           >
             <ChevronLeft size={14} />
-            Previous
+            {t("common.previous")}
           </Button>
           <span className="text-xs text-muted-foreground">
-            Page {page} of {totalPages}
+            {t("exercises.pageOf", { page, total: totalPages })}
           </span>
           <Button
             variant="outline"
@@ -264,7 +268,7 @@ export function ExercisesPage() {
             disabled={page === totalPages}
             className="gap-1.5"
           >
-            Next
+            {t("common.next")}
             <ChevronRight size={14} />
           </Button>
         </div>

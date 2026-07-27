@@ -2,6 +2,8 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { Volume2, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { translateText } from "@/lib/api";
+import { useTranslation } from "react-i18next";
+import "@/lib/i18n";
 
 export type WordMeaning = {
   word: string;
@@ -94,6 +96,7 @@ type Props = {
 };
 
 export function ClickableText({ text, language, nativeLanguage = "english", wordMeanings = [], className }: Props) {
+  const { t } = useTranslation();
   const [popup, setPopup] = useState<Popup | null>(null);
   const popupRef = useRef<HTMLDivElement>(null);
   const langCode = toLangCode(language);
@@ -199,7 +202,7 @@ export function ClickableText({ text, language, nativeLanguage = "english", word
             <button
               onClick={() => speakText(popup.word, langCode)}
               className="shrink-0 mt-0.5 text-muted-foreground hover:text-foreground transition-colors rounded p-0.5 hover:bg-secondary"
-              title="Listen"
+              title={t("common.listen")}
             >
               <Volume2 size={13} />
             </button>
@@ -210,7 +213,7 @@ export function ClickableText({ text, language, nativeLanguage = "english", word
           ) : popup.translating ? (
             <div className="flex items-center gap-1.5 mt-1.5">
               <Loader2 size={11} className="animate-spin text-muted-foreground" />
-              <span className="text-xs text-muted-foreground">Translating...</span>
+              <span className="text-xs text-muted-foreground">{t("common.translating")}</span>
             </div>
           ) : popup.fetchedTranslation != null ? (
             <p className="text-xs text-foreground/80 mt-1.5 leading-snug">{popup.fetchedTranslation}</p>
@@ -219,7 +222,7 @@ export function ClickableText({ text, language, nativeLanguage = "english", word
               onClick={handleTranslate}
               className="text-xs text-primary hover:underline mt-1.5 block"
             >
-              Translate
+              {t("common.translate")}
             </button>
           )}
         </div>

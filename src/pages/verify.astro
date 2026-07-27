@@ -36,10 +36,42 @@
   <body>
     <div class="container" id="root">
       <div class="spinner"></div>
-      <p>Signing you in...</p>
+      <p id="signing-in-text">Signing you in...</p>
     </div>
 
     <script>
+      const STRINGS = {
+        en: {
+          signingIn: "Signing you in...",
+          signInFailed: "Sign-in failed",
+          goBack: "Go back",
+          cancelled: "Sign-in was cancelled.",
+          googleFailed: "Google sign-in failed. Please try again.",
+          noToken: "No token found.",
+          invalidToken: "Invalid token. Please try signing in again.",
+        },
+        es: {
+          signingIn: "Iniciando sesión...",
+          signInFailed: "Error al iniciar sesión",
+          goBack: "Volver",
+          cancelled: "El inicio de sesión fue cancelado.",
+          googleFailed: "Falló el inicio de sesión con Google. Intenta de nuevo.",
+          noToken: "No se encontró el token.",
+          invalidToken: "Token inválido. Intenta iniciar sesión de nuevo.",
+        },
+      } as const;
+
+      const stored = localStorage.getItem("learnit_locale");
+      const locale =
+        stored === "en" || stored === "es"
+          ? stored
+          : navigator.language.slice(0, 2) === "es"
+            ? "es"
+            : "en";
+      const t = STRINGS[locale];
+      document.documentElement.lang = locale;
+      document.getElementById("signing-in-text")!.textContent = t.signingIn;
+
       function decodeJWTPayload(token: string): Record<string, unknown> {
         const [, payload] = token.split(".");
         return JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/")));
@@ -48,10 +80,10 @@
       function showError(msg: string) {
         const root = document.getElementById("root")!;
         root.innerHTML = `
-          <p style="font-size:18px;margin-bottom:8px">Sign-in failed</p>
+          <p style="font-size:18px;margin-bottom:8px">${t.signInFailed}</p>
           <p class="error">${msg}</p>
           <p style="margin-top:16px;font-size:14px">
-            <a class="link" href="/">Go back</a>
+            <a class="link" href="/">${t.goBack}</a>
           </p>
         `;
       }
@@ -61,13 +93,9 @@
       const authError = params.get("auth_error");
 
       if (authError) {
-        showError(
-          authError === "denied"
-            ? "Sign-in was cancelled."
-            : "Google sign-in failed. Please try again.",
-        );
+        showError(authError === "denied" ? t.cancelled : t.googleFailed);
       } else if (!jwt) {
-        showError("No token found.");
+        showError(t.noToken);
       } else {
         try {
           const payload = decodeJWTPayload(jwt);
@@ -78,7 +106,7 @@
           );
           window.location.href = "/learn";
         } catch {
-          showError("Invalid token. Please try signing in again.");
+          showError(t.invalidToken);
         }
       }
     </script>

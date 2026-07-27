@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from "motion/react";
 import { Mic, MicOff, Volume2, RefreshCw, Check, X } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { useTranslation } from "react-i18next";
+import "@/lib/i18n";
 
 const SAMPLE_PHRASES: Record<string, string[]> = {
   japanese: [
@@ -68,6 +70,7 @@ interface SRInstance {
 type SpeechRecognitionCtor = new () => SRInstance;
 
 export function SpeakPage() {
+  const { t } = useTranslation();
   const [language, setLanguage] = useState("japanese");
   const [phrase, setPhrase] = useState("");
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -128,7 +131,7 @@ export function SpeakPage() {
       | SpeechRecognitionCtor
       | undefined;
     if (!SR) {
-      alert("Speech recognition is not supported in this browser. Use Chrome or Edge.");
+      alert(t("speak.srNotSupported"));
       return;
     }
 
@@ -162,7 +165,7 @@ export function SpeakPage() {
       setIsListening(false);
       setPhase("idle");
       if (event.error === "not-allowed") {
-        alert("Microphone access denied. Please allow microphone access.");
+        alert(t("speak.micDenied"));
       }
     };
 
@@ -193,10 +196,10 @@ export function SpeakPage() {
       className="px-6 py-8 max-w-3xl mx-auto w-full"
     >
       <motion.h1 variants={itemVariants} className="font-display text-3xl text-foreground mb-2">
-        Speak
+        {t("speak.title")}
       </motion.h1>
       <motion.p variants={itemVariants} className="text-muted-foreground mb-8">
-        Listen to the phrase, repeat it aloud. Your speech will be checked.
+        {t("speak.subtitle")}
       </motion.p>
 
       <motion.div variants={itemVariants} className="flex gap-2 mb-6">
@@ -211,7 +214,7 @@ export function SpeakPage() {
                 : "bg-secondary text-muted-foreground hover:text-foreground",
             ].join(" ")}
           >
-            {lang}
+            {t(`common.languages.${lang}`)}
           </button>
         ))}
       </motion.div>
@@ -229,7 +232,7 @@ export function SpeakPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-xs text-muted-foreground uppercase tracking-widest">
-                  Listen and repeat
+                  {t("speak.listenAndRepeat")}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -243,7 +246,7 @@ export function SpeakPage() {
                     className="gap-2"
                   >
                     <Volume2 size={18} className={isSpeaking ? "text-accent animate-pulse" : ""} />
-                    {isSpeaking ? "Speaking..." : "Listen"}
+                    {isSpeaking ? t("speak.speaking") : t("common.listen")}
                   </Button>
                 </div>
               </CardContent>
@@ -267,7 +270,7 @@ export function SpeakPage() {
           </motion.div>
 
           <motion.p variants={itemVariants} className="text-center text-xs text-muted-foreground">
-            {isListening ? "Listening... speak now" : "Tap the mic and repeat the phrase"}
+            {isListening ? t("speak.listening") : t("speak.tapToRepeat")}
           </motion.p>
 
           {phase === "result" && transcript && (
@@ -288,17 +291,17 @@ export function SpeakPage() {
                   >
                     {feedback === "correct" ? <Check size={16} /> : <X size={16} />}
                     <span className="text-sm">
-                      {feedback === "correct" ? "Perfect!" : "Not quite. Keep practicing."}
+                      {feedback === "correct" ? t("speak.perfect") : t("speak.notQuite")}
                     </span>
                   </div>
 
                   <div className="space-y-2 text-sm">
                     <div>
-                      <span className="text-muted-foreground">You said: </span>
+                      <span className="text-muted-foreground">{t("speak.youSaid")}</span>
                       <span className="text-foreground">{transcript}</span>
                     </div>
                     <div>
-                      <span className="text-muted-foreground">Expected: </span>
+                      <span className="text-muted-foreground">{t("speak.expected")}</span>
                       <span className="text-accent">{phrase}</span>
                     </div>
                   </div>
@@ -306,7 +309,7 @@ export function SpeakPage() {
                   <div className="flex gap-2">
                     <Button onClick={speak} variant="outline" size="sm" className="gap-1">
                       <Volume2 size={14} />
-                      Listen again
+                      {t("speak.listenAgain")}
                     </Button>
                     <Button
                       onClick={() => pickRandomPhrase()}
@@ -315,7 +318,7 @@ export function SpeakPage() {
                       className="gap-1"
                     >
                       <RefreshCw size={14} />
-                      New phrase
+                      {t("speak.newPhrase")}
                     </Button>
                   </div>
                 </CardContent>

@@ -20,6 +20,13 @@ const currentPath = new URL(Astro.request.url).pathname;
     <link rel="icon" href="/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>
+    <script is:inline>
+      (function () {
+        var stored = localStorage.getItem("learnit_locale");
+        var lang = stored === "en" || stored === "es" ? stored : navigator.language.slice(0, 2) === "es" ? "es" : "en";
+        document.documentElement.lang = lang;
+      })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

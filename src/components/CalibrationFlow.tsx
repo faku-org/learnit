@@ -5,6 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { generateCalibrationQuestions, type CalibrationLevel, type CalibrationQuestion } from "@/lib/api";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
+import "@/lib/i18n";
 
 const containerVariants = {
   hidden: {},
@@ -22,24 +24,24 @@ type ProjectionAnswers = {
 };
 
 const MOTIVATIONS = [
-  { value: "travel", label: "Travel & tourism" },
-  { value: "work", label: "Work or studies" },
-  { value: "culture", label: "Culture, music or media" },
-  { value: "personal", label: "Personal connection or family" },
+  { value: "travel", labelKey: "calibration.motivationTravel" },
+  { value: "work", labelKey: "calibration.motivationWork" },
+  { value: "culture", labelKey: "calibration.motivationCulture" },
+  { value: "personal", labelKey: "calibration.motivationPersonal" },
 ];
 
 const DAILY_TIMES = [
-  { value: "5-10", label: "5–10 min / day" },
-  { value: "15-30", label: "15–30 min / day" },
-  { value: "30-60", label: "30–60 min / day" },
-  { value: "60+", label: "1 hour+ / day" },
+  { value: "5-10", labelKey: "calibration.dailyTime5_10" },
+  { value: "15-30", labelKey: "calibration.dailyTime15_30" },
+  { value: "30-60", labelKey: "calibration.dailyTime30_60" },
+  { value: "60+", labelKey: "calibration.dailyTime60Plus" },
 ];
 
 const PRIOR_EXPOSURES = [
-  { value: "none", label: "Never studied it" },
-  { value: "little", label: "A few words/phrases" },
-  { value: "some", label: "Basics (greetings, numbers, colors)" },
-  { value: "more", label: "Simple sentences and conversations" },
+  { value: "none", labelKey: "calibration.priorNone" },
+  { value: "little", labelKey: "calibration.priorLittle" },
+  { value: "some", labelKey: "calibration.priorSome" },
+  { value: "more", labelKey: "calibration.priorMore" },
 ];
 
 type TargetLevel = "beginner" | "elementary" | "intermediate" | "advanced";
@@ -58,23 +60,11 @@ function scoreToLevel(correct: number, total: number, priorExposure: string): Ca
   return "intermediate";
 }
 
-const LEVEL_LABELS: Record<CalibrationLevel, { label: string; description: string }> = {
-  complete_beginner: {
-    label: "Complete Beginner",
-    description: "Your path starts from zero — alphabet, basic phrases, and core vocabulary.",
-  },
-  some_basics: {
-    label: "Some Basics",
-    description: "You know a few things. Your path skips absolute basics and focuses on building structure.",
-  },
-  elementary: {
-    label: "Elementary",
-    description: "Solid foundation. Your path jumps into grammar patterns and practical sentences.",
-  },
-  intermediate: {
-    label: "Intermediate",
-    description: "You already have foundations. Your path focuses on fluency and complex structures.",
-  },
+const LEVEL_KEYS: Record<CalibrationLevel, string> = {
+  complete_beginner: "completeBeginner",
+  some_basics: "someBasics",
+  elementary: "elementary",
+  intermediate: "intermediate",
 };
 
 type Step = "projection" | "quiz" | "result";
@@ -87,6 +77,7 @@ type Props = {
 };
 
 export function CalibrationFlow({ language, nativeLanguage = "english", onComplete, onSkip }: Props) {
+  const { t } = useTranslation();
   const [step, setStep] = useState<Step>("projection");
   const [projection, setProjection] = useState<Partial<ProjectionAnswers>>({});
   const [loadingQuiz, setLoadingQuiz] = useState(false);
@@ -119,7 +110,7 @@ export function CalibrationFlow({ language, nativeLanguage = "english", onComple
       setLevel(null);
       setStep("quiz");
     } catch {
-      toast.error("Failed to generate calibration questions. Try again.");
+      toast.error(t("calibration.toastQuizError"));
     } finally {
       setLoadingQuiz(false);
     }
@@ -175,25 +166,24 @@ export function CalibrationFlow({ language, nativeLanguage = "english", onComple
           >
             <motion.div variants={itemVariants}>
               <p className="text-sm text-muted-foreground mb-1">
-                A few quick questions to personalize your {language} path.
+                {t("calibration.personalize", { language })}
               </p>
             </motion.div>
 
             <ProjectionSection
-              title="Why are you learning?"
+              title={t("calibration.whyLearning")}
               options={MOTIVATIONS}
               value={projection.motivation}
               onChange={(v) => setProjection((p) => ({ ...p, motivation: v }))}
             />
             <ProjectionSection
-              title="How much time can you dedicate daily?"
+              title={t("calibration.dailyTimeQuestion")}
               options={DAILY_TIMES}
               value={projection.dailyTime}
               onChange={(v) => setProjection((p) => ({ ...p, dailyTime: v }))}
             />
             <ProjectionSection
-              title="Prior exposure to {language}?"
-              titleLanguage={language}
+              title={t("calibration.priorExposureQuestion", { language })}
               options={PRIOR_EXPOSURES}
               value={projection.priorExposure}
               onChange={(v) => setProjection((p) => ({ ...p, priorExposure: v }))}
@@ -210,10 +200,10 @@ export function CalibrationFlow({ language, nativeLanguage = "english", onComple
                 ) : (
                   <ChevronRight size={15} />
                 )}
-                {loadingQuiz ? "Loading quiz..." : "Take calibration quiz"}
+                {loadingQuiz ? t("calibration.loadingQuiz") : t("calibration.takeQuiz")}
               </Button>
               <Button variant="ghost" onClick={onSkip} className="text-muted-foreground shrink-0">
-                Skip
+                {t("common.skip")}
               </Button>
             </motion.div>
           </motion.div>
@@ -231,7 +221,7 @@ export function CalibrationFlow({ language, nativeLanguage = "english", onComple
           >
             <motion.div variants={itemVariants} className="flex items-center justify-between">
               <p className="text-xs text-muted-foreground uppercase tracking-widest">
-                Question {currentQ + 1} / {questions.length}
+                {t("calibration.questionCounter", { current: currentQ + 1, total: questions.length })}
               </p>
               <div className="flex gap-1">
                 {questions.map((_, i) => (
@@ -303,19 +293,19 @@ export function CalibrationFlow({ language, nativeLanguage = "english", onComple
                         disabled={selectedOption === null}
                         className="flex-1"
                       >
-                        Confirm
+                        {t("common.confirm")}
                       </Button>
                       <Button
                         onClick={dontKnow}
                         variant="ghost"
                         className="text-muted-foreground shrink-0"
                       >
-                        I don't know
+                        {t("calibration.dontKnow")}
                       </Button>
                     </div>
                   ) : (
                     <Button onClick={nextQuestion} className="w-full gap-2">
-                      {currentQ + 1 >= questions.length ? "See results" : "Next"}
+                      {currentQ + 1 >= questions.length ? t("calibration.seeResults") : t("common.next")}
                       <ChevronRight size={14} />
                     </Button>
                   )}
@@ -339,16 +329,19 @@ export function CalibrationFlow({ language, nativeLanguage = "english", onComple
               <Card className="border-accent/30 bg-accent/5">
                 <CardContent className="pt-5 space-y-2">
                   <p className="text-xs text-accent uppercase tracking-widest font-semibold">
-                    Calibration complete
+                    {t("calibration.calibrationComplete")}
                   </p>
                   <p className="text-xl font-display text-foreground">
-                    {LEVEL_LABELS[level].label}
+                    {t(`calibration.levels.${LEVEL_KEYS[level]}.label`)}
                   </p>
                   <p className="text-sm text-muted-foreground">
-                    {LEVEL_LABELS[level].description}
+                    {t(`calibration.levels.${LEVEL_KEYS[level]}.description`)}
                   </p>
                   <div className="pt-1 text-xs text-muted-foreground/60">
-                    {answers.filter((a, i) => a === questions[i].correctIndex).length} / {questions.length} correct
+                    {t("calibration.correctCount", {
+                      correct: answers.filter((a, i) => a === questions[i].correctIndex).length,
+                      total: questions.length,
+                    })}
                   </div>
                 </CardContent>
               </Card>
@@ -357,7 +350,7 @@ export function CalibrationFlow({ language, nativeLanguage = "english", onComple
             <motion.div variants={itemVariants} className="flex gap-2">
               <Button onClick={handleUseLevel} className="flex-1 gap-2">
                 <Check size={14} />
-                Generate my path
+                {t("calibration.generatePath")}
               </Button>
               <Button
                 variant="ghost"
@@ -368,7 +361,7 @@ export function CalibrationFlow({ language, nativeLanguage = "english", onComple
                 }}
                 disabled={loadingQuiz}
                 className="text-muted-foreground gap-1.5 shrink-0"
-                title="Redo quiz with new questions"
+                title={t("calibration.redoTitle")}
               >
                 {loadingQuiz ? <Loader2 size={13} className="animate-spin" /> : <RotateCcw size={13} />}
               </Button>
@@ -382,17 +375,16 @@ export function CalibrationFlow({ language, nativeLanguage = "english", onComple
 
 type ProjectionSectionProps = {
   title: string;
-  titleLanguage?: string;
-  options: { value: string; label: string }[];
+  options: { value: string; labelKey: string }[];
   value: string | undefined;
   onChange: (v: string) => void;
 };
 
-function ProjectionSection({ title, titleLanguage, options, value, onChange }: ProjectionSectionProps) {
-  const displayTitle = titleLanguage ? title.replace("{language}", titleLanguage) : title;
+function ProjectionSection({ title, options, value, onChange }: ProjectionSectionProps) {
+  const { t } = useTranslation();
   return (
     <motion.div variants={itemVariants} className="space-y-2">
-      <p className="text-sm font-medium text-foreground">{displayTitle}</p>
+      <p className="text-sm font-medium text-foreground">{title}</p>
       <div className="grid grid-cols-2 gap-2">
         {options.map((opt) => (
           <button
@@ -405,7 +397,7 @@ function ProjectionSection({ title, titleLanguage, options, value, onChange }: P
                 : "border-border text-muted-foreground hover:border-primary/30 hover:text-foreground",
             ].join(" ")}
           >
-            {opt.label}
+            {t(opt.labelKey)}
           </button>
         ))}
       </div>
