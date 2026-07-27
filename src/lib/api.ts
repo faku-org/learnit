@@ -141,12 +141,27 @@ export const getNextExercise = (params: {
   return request<Record<string, unknown>>(`/api/exercises/next?${qs}`);
 };
 
+/**
+ * Records the SM-2 update, and — when the path context is supplied — an entry in
+ * the attempt log that every statistic is derived from.
+ */
 export const recordAnswer = (data: {
   exerciseId: string;
   correct: boolean;
   quality?: number;
+  pathId?: string | null;
+  moduleIndex?: number;
+  topicIndex?: number;
+  topicName?: string;
+  moduleName?: string;
+  exerciseType?: string;
+  durationMs?: number;
+  gaveUp?: boolean;
 }) =>
-  request<Record<string, unknown>>("/api/exercises/answer", {
+  request<{
+    points?: number;
+    sessionTotals?: { total: number; correct: number; points: number; pass: number };
+  }>("/api/exercises/answer", {
     method: "POST",
     body: JSON.stringify(data),
   });
@@ -226,6 +241,79 @@ export const getProgress = (pathId?: string) => {
 
 export const saveProgress = (data: Partial<Progress>) =>
   request<Progress>("/api/progress", { method: "POST", body: JSON.stringify(data) });
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
+
+export type LessonSummary = {
+  pass: number;
+  topicName: string;
+  total: number;
+  correct: number;
+  wrong: number;
+  gaveUp: number;
+  durationMs: number;
+  accuracy: number;
+  points: number;
+  mostCommonErrorType: string | null;
+  improvement: { previousAccuracy: number; delta: number } | null;
+};
+
+export type SectionSummary = {
+  moduleName: string;
+  lessonsCompleted: number;
+  totalPoints: number;
+  bonus: number;
+  total: number;
+  correct: number;
+  accuracy: number;
+  durationMs: number;
+  hardestTopic: { topicName: string; accuracy: number } | null;
+};
+
+type TopicRef = { topicName: string; moduleIndex: number; topicIndex: number };
+
+export type Recommendation = {
+  kind: "revisit" | "needs_explanation" | "keep_practicing" | "on_track" | "get_started";
+  topicName?: string;
+  moduleIndex?: number;
+  topicIndex?: number;
+  message: string;
+};
+
+export type StatsOverview = {
+  totalPoints: number;
+  totalAnswered: number;
+  accuracy: number;
+  totalTimeMs: number;
+  topicsCompleted: number;
+  mostCommonErrorType: string | null;
+  hardestTopics: (TopicRef & { accuracy: number; total: number })[];
+  mostGaveUp: (TopicRef & { gaveUp: number })[];
+  mostRepeated: (TopicRef & { passes: number })[];
+  biggestImprovements: (TopicRef & { from: number; to: number; delta: number })[];
+  recommendations: Recommendation[];
+};
+
+export const completeTopic = (data: {
+  pathId?: string | null;
+  moduleIndex: number;
+  topicIndex: number;
+}) =>
+  request<LessonSummary>("/api/stats/topic/complete", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+
+export const completeModule = (data: { pathId?: string | null; moduleIndex: number }) =>
+  request<SectionSummary>("/api/stats/module/complete", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+
+export const getStatsOverview = (pathId?: string) => {
+  const suffix = pathId ? `?pathId=${encodeURIComponent(pathId)}` : "";
+  return request<StatsOverview>(`/api/stats/overview${suffix}`);
+};
 
 // ── Streak ────────────────────────────────────────────────────────────────────
 

@@ -39,13 +39,19 @@ import {
   addVocabulary,
   enrichVocabulary,
   hydrateModuleTopics,
+  completeTopic,
+  completeModule,
   type Progress,
+  type LessonSummary as LessonSummaryData,
+  type SectionSummary as SectionSummaryData,
 } from "@/lib/api";
 import { getCachedPhraseTranslation, setCachedPhraseTranslation } from "@/components/ClickableText";
 import { PathRoadmap, type RoadmapModule } from "@/components/PathRoadmap";
 import { ClickableText, toLangCode, speakText, type WordMeaning } from "@/components/ClickableText";
 import { AuthGuard } from "@/components/AuthGuard";
 import { FeedbackModal } from "@/components/FeedbackModal";
+import { LessonSummary } from "@/components/LessonSummary";
+import { SectionSummary } from "@/components/SectionSummary";
 import { toast } from "sonner";
 
 const QUEUE_SIZE = 2;
@@ -151,6 +157,8 @@ function LearnInner() {
   const [justAdvanced, setJustAdvanced] = useState(false);
   const [answeredCount, setAnsweredCount] = useState(0);
   const [showFeedback, setShowFeedback] = useState(false);
+  const [lessonSummary, setLessonSummary] = useState<LessonSummaryData | null>(null);
+  const [sectionSummary, setSectionSummary] = useState<SectionSummaryData | null>(null);
   const [phraseTranslation, setPhraseTranslation] = useState<string | null>(null);
   const [phraseTranslating, setPhraseTranslating] = useState(false);
   const [savingWord, setSavingWord] = useState<string | null>(null);
@@ -166,11 +174,15 @@ function LearnInner() {
   const progressRef = useRef<Progress | null>(null);
   const activeTopicRef = useRef<string | null>(null);
   const hydratingRef = useRef<Set<number>>(new Set());
+  const shownAtRef = useRef<number>(Date.now());
 
   useEffect(() => { queueRef.current = exerciseQueue; }, [exerciseQueue]);
   useEffect(() => { currentPathRef.current = currentPath; }, [currentPath]);
   useEffect(() => { progressRef.current = progress; }, [progress]);
   useEffect(() => { activeTopicRef.current = activeTopicKey; }, [activeTopicKey]);
+
+  // Time-on-exercise starts when it lands on screen, whatever put it there.
+  useEffect(() => { if (exercise) shownAtRef.current = Date.now(); }, [exercise]);
 
   const currentTopicName = useMemo(() => {
     if (!currentPath || !progress) return null;
@@ -215,6 +227,30 @@ function LearnInner() {
       }
     }
     return { language, topic, level: "beginner", nativeLanguage: nativeLangRef.current };
+  }, []);
+
+  /**
+   * Where on the path the answer about to be recorded belongs. A topic replayed
+   * from the roadmap is attributed to itself, not to the student's current spot.
+   */
+  const resolveTopicRef = useCallback(() => {
+    const path = currentPathRef.current;
+    const prog = progressRef.current;
+    if (!path || !prog) return null;
+    const currentKey = `${prog.currentModuleIndex}-${prog.currentTopicIndex}`;
+    const key = activeTopicRef.current ?? currentKey;
+    const [moduleIndex, topicIndex] = key.split("-").map(Number);
+    const mod = path.modules[moduleIndex];
+    const topic = mod?.topics?.[topicIndex];
+    if (!topic) return null;
+    return {
+      pathId: path._id,
+      moduleIndex,
+      topicIndex,
+      topicName: topic.name,
+      moduleName: mod.name,
+      isReplay: key !== currentKey,
+    };
   }, []);
 
   const prefillQueue = useCallback(
@@ -376,7 +412,19 @@ function LearnInner() {
     try { await saveProgress(newProg); } catch { /* non-critical */ }
   }, []);
 
-  const handleCorrectAnswer = useCallback(() => {
+  /** Close the finished lesson (and its section, if that was its last topic). */
+  const reportCompletion = useCallback(
+    async (pathId: string, moduleIndex: number, topicIndex: number, sectionDone: boolean) => {
+      const summary = await completeTopic({ pathId, moduleIndex, topicIndex }).catch(() => null);
+      if (summary) setLessonSummary(summary);
+      if (!sectionDone) return;
+      const section = await completeModule({ pathId, moduleIndex }).catch(() => null);
+      if (section) setSectionSummary(section);
+    },
+    [],
+  );
+
+  const handleCorrectAnswer = useCallback(async () => {
     const prog = progressRef.current;
     const path = currentPathRef.current;
     if (!prog || !path) return;
@@ -391,7 +439,8 @@ function LearnInner() {
       ...prog,
       topicStats: { ...prog.topicStats, [key]: { total: stats.total + 1, correct: newCorrect } },
     };
-    if (newCorrect >= CORRECT_TO_ADVANCE) {
+    const advanced = newCorrect >= CORRECT_TO_ADVANCE;
+    if (advanced) {
       newProg = advanceTopic(newProg, path.modules);
       setActiveTopicKey(null);
       setJustAdvanced(true);
@@ -400,7 +449,20 @@ function LearnInner() {
     }
     setProgress(newProg);
     persistProgress(newProg);
-  }, [persistProgress]);
+
+    if (!advanced) return;
+    // A module is done either when the student steps into the next one, or when
+    // advanceTopic has nowhere left to go — the end of the path.
+    const sectionDone =
+      newProg.currentModuleIndex !== prog.currentModuleIndex ||
+      newProg.currentTopicIndex === prog.currentTopicIndex;
+    await reportCompletion(
+      path._id,
+      prog.currentModuleIndex,
+      prog.currentTopicIndex,
+      sectionDone,
+    );
+  }, [persistProgress, reportCompletion]);
 
   const handleWrongAnswer = useCallback(() => {
     const prog = progressRef.current;
@@ -419,7 +481,51 @@ function LearnInner() {
     persistProgress(newProg);
   }, [persistProgress]);
 
-  const handleSubmit = () => {
+  /**
+   * A replayed topic never advances the path, so its session is closed once the
+   * student clears it again — that second pass is what the improvement % needs.
+   */
+  const finishReplayIfCleared = useCallback(
+    async (sessionCorrect: number, ref: NonNullable<ReturnType<typeof resolveTopicRef>>) => {
+      if (sessionCorrect < CORRECT_TO_ADVANCE) return;
+      const summary = await completeTopic({
+        pathId: ref.pathId,
+        moduleIndex: ref.moduleIndex,
+        topicIndex: ref.topicIndex,
+      }).catch(() => null);
+      if (!summary) return;
+      setLessonSummary(summary);
+      setActiveTopicKey(null);
+      queueRef.current = [];
+      setExerciseQueue([]);
+    },
+    [],
+  );
+
+  /** Records the attempt and returns the session totals the server now holds. */
+  const record = useCallback(
+    async (exerciseId: string, isCorrect: boolean, gaveUp: boolean, type: string) => {
+      const ref = resolveTopicRef();
+      const result = await recordAnswer({
+        exerciseId,
+        correct: isCorrect,
+        ...(gaveUp ? { quality: 0 } : {}),
+        durationMs: Math.max(0, Date.now() - shownAtRef.current),
+        gaveUp,
+        exerciseType: type,
+        pathId: ref?.pathId,
+        moduleIndex: ref?.moduleIndex,
+        topicIndex: ref?.topicIndex,
+        topicName: ref?.topicName,
+        moduleName: ref?.moduleName,
+      }).catch(() => null);
+      if (result?.points) toast.success(`+${result.points} points`);
+      return { ref, result };
+    },
+    [resolveTopicRef],
+  );
+
+  const handleSubmit = async () => {
     if (!exercise) return;
     let isCorrect = false;
     if (exercise.type === "multiple_choice" || exercise.type === "reading_comprehension") {
@@ -437,23 +543,26 @@ function LearnInner() {
     setCorrect(isCorrect);
     setSubmitted(true);
 
-    // Record for SRS
-    if (exercise._id) {
-      recordAnswer({ exerciseId: exercise._id, correct: isCorrect }).catch(() => {});
-    }
-
-    if (isCorrect) {
-      updateStreak().catch(console.error);
-      handleCorrectAnswer();
-    } else {
-      handleWrongAnswer();
-    }
-
     // Feedback trigger
     const next = answeredCount + 1;
     setAnsweredCount(next);
     if (next % FEEDBACK_EVERY === 0) {
       setTimeout(() => setShowFeedback(true), 800);
+    }
+
+    if (!isCorrect) handleWrongAnswer();
+    else updateStreak().catch(console.error);
+
+    // The attempt must land before the session can be closed below.
+    const recorded = exercise._id
+      ? await record(exercise._id, isCorrect, false, exercise.type)
+      : null;
+
+    if (!isCorrect) return;
+    if (recorded?.ref?.isReplay) {
+      await finishReplayIfCleared(recorded.result?.sessionTotals?.correct ?? 0, recorded.ref);
+    } else {
+      await handleCorrectAnswer();
     }
   };
 
@@ -462,7 +571,7 @@ function LearnInner() {
     setGaveUp(true);
     handleWrongAnswer();
     if (exercise._id) {
-      recordAnswer({ exerciseId: exercise._id, correct: false, quality: 0 }).catch(() => {});
+      record(exercise._id, false, true, exercise.type);
     }
     setExplaining(true);
     try {
@@ -557,12 +666,23 @@ function LearnInner() {
 
   return (
     <div className="flex">
-      {showFeedback && (
+      {showFeedback && !lessonSummary && !sectionSummary && (
         <FeedbackModal
           exerciseCount={answeredCount}
           onClose={() => setShowFeedback(false)}
         />
       )}
+
+      {/* Never stacked: dismissing the lesson report reveals the section one. */}
+      {lessonSummary ? (
+        <LessonSummary
+          summary={lessonSummary}
+          nextTopicName={sectionSummary ? null : currentTopicName}
+          onClose={() => setLessonSummary(null)}
+        />
+      ) : sectionSummary ? (
+        <SectionSummary summary={sectionSummary} onClose={() => setSectionSummary(null)} />
+      ) : null}
 
       <AnimatePresence>
         {hasPath && showRoadmap && currentPath && progress && (
