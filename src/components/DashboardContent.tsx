@@ -3,8 +3,9 @@ import { motion } from "motion/react";
 import { Flame, ArrowRight } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { getStreak, getCurrentPath } from "@/lib/api";
+import { getStreak, getCurrentPath, getStatsOverview, type StatsOverview as Overview } from "@/lib/api";
 import { AuthGuard } from "@/components/AuthGuard";
+import { StatsOverview } from "@/components/StatsOverview";
 
 const containerVariants = {
   hidden: {},
@@ -22,12 +23,14 @@ type Streak = { currentStreak: number; longestStreak: number };
 function DashboardInner() {
   const [streak, setStreak] = useState<Streak | null>(null);
   const [path, setPath] = useState<Path | null>(null);
+  const [stats, setStats] = useState<Overview | null>(null);
 
   useEffect(() => {
     getStreak().then(setStreak).catch(console.error);
     getCurrentPath()
       .then((data) => setPath(data as unknown as Path))
       .catch(() => {});
+    getStatsOverview().then(setStats).catch(() => {});
   }, []);
 
   return (
@@ -55,7 +58,7 @@ function DashboardInner() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-xs text-muted-foreground uppercase tracking-widest">
                 <Flame size={14} className="text-accent" />
-                Racha
+                Streak
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -94,6 +97,8 @@ function DashboardInner() {
           </Card>
         </motion.div>
       </motion.div>
+
+      {stats && <StatsOverview stats={stats} />}
 
       {path && path.modules && (
         <motion.div variants={itemVariants}>
