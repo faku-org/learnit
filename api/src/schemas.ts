@@ -81,6 +81,47 @@ export const VocabularySchema = z.object({
 
 export type Vocabulary = z.infer<typeof VocabularySchema>;
 
+// === Attempt (append-only log of every answered exercise) ===
+export const AttemptSchema = z.object({
+  userId: z.string(),
+  pathId: z.string().nullable().default(null),
+  moduleIndex: z.number(),
+  topicIndex: z.number(),
+  topicName: z.string().default(""),
+  moduleName: z.string().default(""),
+  exerciseId: z.string(),
+  exerciseType: z.string().default("unknown"),
+  pass: z.number().default(1),
+  outcome: z.enum(["correct", "wrong", "gave_up"]),
+  durationMs: z.number().default(0),
+  points: z.number().default(0),
+  createdAt: z.string(),
+});
+
+export type Attempt = z.infer<typeof AttemptSchema>;
+
+// === Topic session (one pass over a topic; a "lesson" run) ===
+export const TopicSessionSchema = z.object({
+  userId: z.string(),
+  pathId: z.string().nullable().default(null),
+  moduleIndex: z.number(),
+  topicIndex: z.number(),
+  topicName: z.string().default(""),
+  moduleName: z.string().default(""),
+  pass: z.number().default(1),
+  startedAt: z.string(),
+  completedAt: z.string().nullable().default(null),
+  total: z.number().default(0),
+  correct: z.number().default(0),
+  wrong: z.number().default(0),
+  gaveUp: z.number().default(0),
+  durationMs: z.number().default(0),
+  points: z.number().default(0),
+  errorsByType: z.record(z.string(), z.number()).default({}),
+});
+
+export type TopicSession = z.infer<typeof TopicSessionSchema>;
+
 // === Preferences ===
 export const PreferencesSchema = z.object({
   activePathId: z.string().nullable().default(null),

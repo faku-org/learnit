@@ -1,9 +1,15 @@
 import { Elysia } from "elysia";
 import { cors } from "@elysiajs/cors";
-import { ObjectId } from "mongodb";
+import { ObjectId, type Db } from "mongodb";
 import { MsEdgeTTS, OUTPUT_FORMAT } from "msedge-tts";
 import { connectDB, getDB } from "./db";
-import { GoalSchema, VocabularySchema, PreferencesSchema } from "./schemas";
+import {
+  GoalSchema,
+  VocabularySchema,
+  PreferencesSchema,
+  type Attempt,
+  type TopicSession,
+} from "./schemas";
 import { generateJSON, validateExercise, PRO_MODEL } from "./llm";
 import {
   PATH_OUTLINE_SYSTEM_PROMPT,
@@ -62,6 +68,32 @@ function sm2Update(card: SRSCard, quality: number): SRSCard {
 
   const dueDate = new Date(Date.now() + interval * 24 * 60 * 60 * 1000).toISOString();
   return { ...card, ease, interval, repetitions, dueDate, lastScore: quality >= 3 ? 1 : 0 };
+}
+
+// ── Points ────────────────────────────────────────────────────────────────────
+
+const POINTS = {
+  correct: 10,
+  /** Answered correctly in under FAST_MS. */
+  fastBonus: 3,
+  /** Correct, but this exercise had already been answered correctly before. */
+  correctRepeat: 5,
+  topicComplete: 25,
+  moduleComplete: 100,
+} as const;
+
+const FAST_MS = 10_000;
+
+type Outcome = "correct" | "wrong" | "gave_up";
+
+function awardAnswerPoints(
+  outcome: Outcome,
+  durationMs: number,
+  alreadyMastered: boolean,
+): number {
+  if (outcome !== "correct") return 0;
+  if (alreadyMastered) return POINTS.correctRepeat;
+  return POINTS.correct + (durationMs > 0 && durationMs < FAST_MS ? POINTS.fastBonus : 0);
 }
 
 // ── Adaptive difficulty ───────────────────────────────────────────────────────
@@ -160,6 +192,72 @@ async function generateModuleTopics(
     order: t.order ?? i + 1,
     description: t.description,
   }));
+}
+
+// ── Stats helpers ─────────────────────────────────────────────────────────────
+
+type TopicRef = {
+  pathId: string | null;
+  moduleIndex: number;
+  topicIndex: number;
+  topicName?: string;
+  moduleName?: string;
+};
+
+type StoredTopicSession = TopicSession & { _id: ObjectId };
+
+/**
+ * The open session for a topic, creating one if the student just walked in.
+ * `pass` counts how many times this topic has already been finished, so a
+ * repeated lesson is a new session rather than an append to the old one.
+ */
+async function openTopicSession(
+  db: Db,
+  userId: string,
+  ref: TopicRef,
+): Promise<StoredTopicSession> {
+  const filter = {
+    userId,
+    pathId: ref.pathId,
+    moduleIndex: ref.moduleIndex,
+    topicIndex: ref.topicIndex,
+  };
+  const existing = await db
+    .collection("topic_sessions")
+    .findOne({ ...filter, completedAt: null });
+  if (existing) return existing as unknown as StoredTopicSession;
+
+  const completedPasses = await db
+    .collection("topic_sessions")
+    .countDocuments({ ...filter, completedAt: { $ne: null } });
+
+  const doc: TopicSession = {
+    ...filter,
+    topicName: ref.topicName ?? "",
+    moduleName: ref.moduleName ?? "",
+    pass: completedPasses + 1,
+    startedAt: new Date().toISOString(),
+    completedAt: null,
+    total: 0,
+    correct: 0,
+    wrong: 0,
+    gaveUp: 0,
+    durationMs: 0,
+    points: 0,
+    errorsByType: {},
+  };
+  const { insertedId } = await db.collection("topic_sessions").insertOne(doc);
+  return { ...doc, _id: insertedId };
+}
+
+function accuracyOf(session: Pick<TopicSession, "total" | "correct">): number {
+  return session.total > 0 ? session.correct / session.total : 0;
+}
+
+function topErrorType(errorsByType: Record<string, number>): string | null {
+  const entries = Object.entries(errorsByType);
+  if (entries.length === 0) return null;
+  return entries.reduce((a, b) => (a[1] >= b[1] ? a : b))[0];
 }
 
 // ── Auth helper ───────────────────────────────────────────────────────────────
@@ -953,10 +1051,23 @@ const app = new Elysia()
     const user = await requireUser(headers.authorization, set);
     if (!user) return { error: "Unauthorized" };
 
-    const { exerciseId, correct, quality } = body as {
+    const {
+      exerciseId, correct, quality,
+      // Optional stats context. Absent for callers that only want the SM-2 update.
+      pathId = null, moduleIndex, topicIndex, topicName, moduleName,
+      exerciseType, durationMs = 0, gaveUp = false,
+    } = body as {
       exerciseId: string;
       correct: boolean;
       quality?: number; // 0-5 SM-2 quality; defaults to 5 (correct) or 1 (wrong)
+      pathId?: string | null;
+      moduleIndex?: number;
+      topicIndex?: number;
+      topicName?: string;
+      moduleName?: string;
+      exerciseType?: string;
+      durationMs?: number;
+      gaveUp?: boolean;
     };
 
     if (!exerciseId) {
@@ -973,13 +1084,15 @@ const app = new Elysia()
       exerciseId,
     });
 
+    let card: SRSCard & { updatedAt: string };
+
     if (existing) {
       const updated = sm2Update(existing as unknown as SRSCard, q);
       await db.collection("user_exercises").updateOne(
         { userId: user.userId, exerciseId },
         { $set: { ...updated, updatedAt: now } },
       );
-      return { ...updated, updatedAt: now };
+      card = { ...updated, updatedAt: now };
     } else {
       // Card wasn't created yet (edge case for old exercises/generate flow)
       const exercise = await db
@@ -999,8 +1112,61 @@ const app = new Elysia()
       };
       const updated = sm2Update(baseCard, q);
       await db.collection("user_exercises").insertOne({ ...updated, updatedAt: now });
-      return { ...updated, updatedAt: now };
+      card = { ...updated, updatedAt: now };
     }
+
+    // Without a place on the path there is nothing to attribute the attempt to.
+    if (moduleIndex === undefined || topicIndex === undefined) return card;
+
+    const outcome: Outcome = gaveUp ? "gave_up" : correct ? "correct" : "wrong";
+    // The card was correct on its previous encounter, so this is revision.
+    const alreadyMastered = existing?.lastScore === 1;
+    const points = awardAnswerPoints(outcome, durationMs, alreadyMastered);
+
+    const session = await openTopicSession(db, user.userId, {
+      pathId, moduleIndex, topicIndex, topicName, moduleName,
+    });
+
+    const attempt: Attempt = {
+      userId: user.userId,
+      pathId,
+      moduleIndex,
+      topicIndex,
+      topicName: topicName ?? session.topicName,
+      moduleName: moduleName ?? session.moduleName,
+      exerciseId,
+      exerciseType: exerciseType ?? "unknown",
+      pass: session.pass,
+      outcome,
+      durationMs,
+      points,
+      createdAt: now,
+    };
+    await db.collection("attempts").insertOne(attempt);
+
+    const inc: Record<string, number> = {
+      total: 1,
+      correct: outcome === "correct" ? 1 : 0,
+      wrong: outcome === "wrong" ? 1 : 0,
+      gaveUp: outcome === "gave_up" ? 1 : 0,
+      durationMs,
+      points,
+    };
+    // Only misses shape "most common error"; a correct answer is not an error.
+    if (outcome !== "correct") inc[`errorsByType.${attempt.exerciseType}`] = 1;
+
+    await db.collection("topic_sessions").updateOne({ _id: session._id }, { $inc: inc });
+
+    return {
+      ...card,
+      points,
+      sessionTotals: {
+        total: session.total + 1,
+        correct: session.correct + inc.correct,
+        points: session.points + points,
+        pass: session.pass,
+      },
+    };
   })
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1182,6 +1348,317 @@ Return JSON with all explanations and feedback written in ${nativeLanguage}:
       .updateOne({ userId: user.userId }, { $set: update }, { upsert: true });
     const stored = await db.collection("progress").findOne({ userId: user.userId });
     return stored ? { ...stored, _id: stored._id.toString() } : update;
+  })
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Stats (user-scoped)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // ── Close a topic (lesson) and return its report card ─────────────────────
+
+  .post("/api/stats/topic/complete", async ({ body, headers, set }: any) => {
+    const user = await requireUser(headers.authorization, set);
+    if (!user) return { error: "Unauthorized" };
+
+    const { pathId = null, moduleIndex, topicIndex } = body as {
+      pathId?: string | null;
+      moduleIndex?: number;
+      topicIndex?: number;
+    };
+    if (moduleIndex === undefined || topicIndex === undefined) {
+      set.status = 400;
+      return { error: "moduleIndex and topicIndex are required" };
+    }
+
+    const db = await getDB();
+    const filter = { userId: user.userId, pathId, moduleIndex, topicIndex };
+
+    const open = (await db
+      .collection("topic_sessions")
+      .findOne({ ...filter, completedAt: null })) as unknown as StoredTopicSession | null;
+    if (!open) {
+      set.status = 404;
+      return { error: "No open session for this topic" };
+    }
+
+    // Accuracy of the last finished pass, for the improvement delta.
+    const previous = (await db
+      .collection("topic_sessions")
+      .findOne(
+        { ...filter, completedAt: { $ne: null } },
+        { sort: { pass: -1 } },
+      )) as unknown as TopicSession | null;
+
+    const points = open.points + POINTS.topicComplete;
+    await db.collection("topic_sessions").updateOne(
+      { _id: open._id },
+      { $set: { completedAt: new Date().toISOString(), points } },
+    );
+
+    const accuracy = accuracyOf(open);
+    const previousAccuracy = previous ? accuracyOf(previous) : null;
+
+    return {
+      pass: open.pass,
+      topicName: open.topicName,
+      total: open.total,
+      correct: open.correct,
+      wrong: open.wrong,
+      gaveUp: open.gaveUp,
+      durationMs: open.durationMs,
+      accuracy,
+      points,
+      mostCommonErrorType: topErrorType(open.errorsByType ?? {}),
+      improvement:
+        previousAccuracy === null
+          ? null
+          : { previousAccuracy, delta: accuracy - previousAccuracy },
+    };
+  })
+
+  // ── Close a module (section) and return its report card ───────────────────
+
+  .post("/api/stats/module/complete", async ({ body, headers, set }: any) => {
+    const user = await requireUser(headers.authorization, set);
+    if (!user) return { error: "Unauthorized" };
+
+    const { pathId = null, moduleIndex } = body as {
+      pathId?: string | null;
+      moduleIndex?: number;
+    };
+    if (moduleIndex === undefined) {
+      set.status = 400;
+      return { error: "moduleIndex is required" };
+    }
+
+    const db = await getDB();
+    const sessions = (await db
+      .collection("topic_sessions")
+      .find({ userId: user.userId, pathId, moduleIndex, completedAt: { $ne: null } })
+      .toArray()) as unknown as TopicSession[];
+
+    if (sessions.length === 0) {
+      set.status = 404;
+      return { error: "No completed lessons in this module" };
+    }
+
+    // Walking back into a finished module must not pay the bonus twice.
+    const marker = { userId: user.userId, pathId, moduleIndex };
+    const alreadyAwarded = await db.collection("module_completions").findOne(marker);
+    // `bonus` is what this call granted; `awarded` is what the module is worth.
+    const bonus = alreadyAwarded ? 0 : POINTS.moduleComplete;
+    const awarded = alreadyAwarded ? ((alreadyAwarded.points as number) ?? 0) : bonus;
+    if (!alreadyAwarded) {
+      await db.collection("module_completions").insertOne({
+        ...marker,
+        moduleName: sessions[0].moduleName,
+        points: bonus,
+        completedAt: new Date().toISOString(),
+      });
+    }
+
+    const total = sessions.reduce((n, s) => n + s.total, 0);
+    const correct = sessions.reduce((n, s) => n + s.correct, 0);
+
+    // One entry per topic — a repeated lesson is one lesson, not two.
+    const byTopic = new Map<number, { topicName: string; total: number; correct: number }>();
+    for (const s of sessions) {
+      const agg = byTopic.get(s.topicIndex) ?? { topicName: s.topicName, total: 0, correct: 0 };
+      byTopic.set(s.topicIndex, {
+        topicName: s.topicName || agg.topicName,
+        total: agg.total + s.total,
+        correct: agg.correct + s.correct,
+      });
+    }
+    const hardest = [...byTopic.values()]
+      .filter((t) => t.total > 0)
+      .sort((a, b) => accuracyOf(a) - accuracyOf(b))[0];
+
+    return {
+      moduleName: sessions[0].moduleName,
+      lessonsCompleted: byTopic.size,
+      totalPoints: sessions.reduce((n, s) => n + s.points, 0) + awarded,
+      bonus,
+      total,
+      correct,
+      accuracy: total > 0 ? correct / total : 0,
+      durationMs: sessions.reduce((n, s) => n + s.durationMs, 0),
+      hardestTopic: hardest
+        ? { topicName: hardest.topicName, accuracy: accuracyOf(hardest) }
+        : null,
+    };
+  })
+
+  // ── Dashboard overview ────────────────────────────────────────────────────
+
+  .get("/api/stats/overview", async ({ query, headers, set }: any) => {
+    const user = await requireUser(headers.authorization, set);
+    if (!user) return { error: "Unauthorized" };
+
+    const { pathId } = query as { pathId?: string };
+    const db = await getDB();
+    const scope = { userId: user.userId, ...(pathId ? { pathId } : {}) };
+
+    // One user's sessions are few (topics x passes) — grouping in JS keeps the
+    // rules readable and avoids a pipeline that has to be rewritten per stat.
+    const sessions = (await db
+      .collection("topic_sessions")
+      .find(scope)
+      .toArray()) as unknown as TopicSession[];
+
+    const moduleBonuses = await db
+      .collection("module_completions")
+      .find(scope)
+      .toArray();
+
+    const totalAnswered = sessions.reduce((n, s) => n + s.total, 0);
+
+    if (totalAnswered === 0) {
+      return {
+        totalPoints: 0, totalAnswered: 0, accuracy: 0, totalTimeMs: 0,
+        topicsCompleted: 0, mostCommonErrorType: null,
+        hardestTopics: [], mostGaveUp: [], mostRepeated: [], biggestImprovements: [],
+        recommendations: [
+          { kind: "get_started", message: "Answer a few exercises to start seeing your stats." },
+        ],
+      };
+    }
+
+    type TopicAgg = {
+      key: string;
+      topicName: string;
+      moduleIndex: number;
+      topicIndex: number;
+      total: number;
+      correct: number;
+      gaveUp: number;
+      passes: number;
+      completed: TopicSession[];
+    };
+
+    const byTopic = new Map<string, TopicAgg>();
+    const errorsByType: Record<string, number> = {};
+
+    for (const s of sessions) {
+      const key = `${s.moduleIndex}-${s.topicIndex}`;
+      const agg = byTopic.get(key) ?? {
+        key,
+        topicName: s.topicName,
+        moduleIndex: s.moduleIndex,
+        topicIndex: s.topicIndex,
+        total: 0, correct: 0, gaveUp: 0, passes: 0,
+        completed: [],
+      };
+      agg.topicName = s.topicName || agg.topicName;
+      agg.total += s.total;
+      agg.correct += s.correct;
+      agg.gaveUp += s.gaveUp;
+      if (s.completedAt) {
+        agg.passes++;
+        agg.completed.push(s);
+      }
+      byTopic.set(key, agg);
+      for (const [type, count] of Object.entries(s.errorsByType ?? {})) {
+        errorsByType[type] = (errorsByType[type] ?? 0) + count;
+      }
+    }
+
+    const topics = [...byTopic.values()];
+    const ref = (t: TopicAgg) => ({
+      topicName: t.topicName,
+      moduleIndex: t.moduleIndex,
+      topicIndex: t.topicIndex,
+    });
+
+    // A handful of answers is noise, not a weakness.
+    const hardestTopics = topics
+      .filter((t) => t.total >= 5)
+      .sort((a, b) => accuracyOf(a) - accuracyOf(b))
+      .slice(0, 3)
+      .map((t) => ({ ...ref(t), accuracy: accuracyOf(t), total: t.total }));
+
+    const mostGaveUp = topics
+      .filter((t) => t.gaveUp > 0)
+      .sort((a, b) => b.gaveUp - a.gaveUp)
+      .slice(0, 3)
+      .map((t) => ({ ...ref(t), gaveUp: t.gaveUp }));
+
+    const mostRepeated = topics
+      .filter((t) => t.passes > 1)
+      .sort((a, b) => b.passes - a.passes)
+      .slice(0, 3)
+      .map((t) => ({ ...ref(t), passes: t.passes }));
+
+    const biggestImprovements = topics
+      .filter((t) => t.completed.length >= 2)
+      .map((t) => {
+        const ordered = [...t.completed].sort((a, b) => a.pass - b.pass);
+        const from = accuracyOf(ordered[0]);
+        const to = accuracyOf(ordered[ordered.length - 1]);
+        return { ...ref(t), from, to, delta: to - from };
+      })
+      .filter((t) => t.delta > 0)
+      .sort((a, b) => b.delta - a.delta)
+      .slice(0, 3);
+
+    // Deterministic for now; an LLM can later rewrite `message` without the
+    // frontend changing, since it switches on `kind`.
+    const recommendations: {
+      kind: string;
+      topicName?: string;
+      moduleIndex?: number;
+      topicIndex?: number;
+      message: string;
+    }[] = [];
+
+    const weakest = hardestTopics[0];
+    if (weakest && weakest.accuracy < 0.7) {
+      recommendations.push({
+        kind: "revisit",
+        ...weakest,
+        message: `Revisit ${weakest.topicName} — ${Math.round(weakest.accuracy * 100)}% accuracy over ${weakest.total} answers.`,
+      });
+    }
+    const stuck = mostGaveUp[0];
+    if (stuck && stuck.gaveUp >= 2 && stuck.topicName !== weakest?.topicName) {
+      recommendations.push({
+        kind: "needs_explanation",
+        ...stuck,
+        message: `You asked for help ${stuck.gaveUp} times on ${stuck.topicName}. Go over it once more.`,
+      });
+    }
+    const grinding = mostRepeated.find((t) => t.passes > 2);
+    if (grinding) {
+      recommendations.push({
+        kind: "keep_practicing",
+        ...grinding,
+        message: `${grinding.topicName} has taken ${grinding.passes} passes. Try shorter, more frequent sessions.`,
+      });
+    }
+    if (recommendations.length === 0) {
+      recommendations.push({
+        kind: "on_track",
+        message: "No weak spots yet. Keep the streak going.",
+      });
+    }
+
+    const totalCorrect = topics.reduce((n, t) => n + t.correct, 0);
+
+    return {
+      totalPoints:
+        sessions.reduce((n, s) => n + s.points, 0) +
+        moduleBonuses.reduce((n, m) => n + ((m.points as number) ?? 0), 0),
+      totalAnswered,
+      accuracy: totalCorrect / totalAnswered,
+      totalTimeMs: sessions.reduce((n, s) => n + s.durationMs, 0),
+      topicsCompleted: topics.filter((t) => t.passes > 0).length,
+      mostCommonErrorType: topErrorType(errorsByType),
+      hardestTopics,
+      mostGaveUp,
+      mostRepeated,
+      biggestImprovements,
+      recommendations,
+    };
   })
 
   // ═══════════════════════════════════════════════════════════════════════════
