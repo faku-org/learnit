@@ -19,6 +19,21 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+/** Like `request`, but for multipart bodies — omits the JSON Content-Type so the
+ * browser sets its own `multipart/form-data; boundary=...`. */
+async function requestForm<T>(path: string, formData: FormData): Promise<T> {
+  const res = await fetch(`${API}${path}`, {
+    method: "POST",
+    headers: getAuthHeaders(),
+    body: formData,
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((error as { error?: string }).error || "Request failed");
+  }
+  return res.json() as Promise<T>;
+}
+
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
 export const getMe = () =>
@@ -329,3 +344,65 @@ export const enrichVocabulary = (
   }>(`/api/vocabulary/${id}/enrich`, { method: "POST", body: JSON.stringify(data) });
 export const deleteVocabulary = (id: string) =>
   request(`/api/vocabulary/${id}`, { method: "DELETE" });
+
+// ── Speak (voice practice, powered by xAI) ────────────────────────────────────
+
+/** Fetches synthesized speech as a playable blob. `language` is the app's
+ * language name (e.g. "japanese"), not a BCP-47 code — the backend maps it. */
+export async function synthesizeSpeech(text: string, language: string, voice?: string): Promise<Blob> {
+  const res = await fetch(`${API}/api/speak/tts`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    body: JSON.stringify({ text, language, voice }),
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((error as { error?: string }).error || "TTS failed");
+  }
+  return res.blob();
+}
+
+export const getRealtimeVoiceToken = () =>
+  request<{ value: string; expires_at: number }>("/api/speak/realtime-token", { method: "POST" });
+
+export const transcribeSpeech = (audio: Blob, language?: string, filename = "speech.webm") => {
+  const formData = new FormData();
+  formData.append("audio", audio, filename);
+  if (language) formData.append("language", language);
+  return requestForm<{ transcript: string }>("/api/speak/transcribe", formData);
+};
+
+export type SpeakScenario = {
+  situation: string;
+  prompt: string;
+  sampleResponse: string;
+};
+
+export const generateSpeakScenario = (data: {
+  language: string;
+  level?: string;
+  topic?: string;
+  nativeLanguage?: string;
+}) =>
+  request<SpeakScenario>("/api/speak/scenario", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+
+export type SpeakGrade = {
+  correct: boolean;
+  feedback: string;
+  corrected: string | null;
+};
+
+export const gradeSpeakResponse = (data: {
+  language: string;
+  situation: string;
+  prompt: string;
+  transcript: string;
+  nativeLanguage?: string;
+}) =>
+  request<SpeakGrade>("/api/speak/grade", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });

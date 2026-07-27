@@ -564,3 +564,60 @@ ${wordMeaningsNote} Annotate words from the "sourceText" field.`,
 ${difficultySection}
 ${typeInstructions[type]}`;
 }
+
+// --- Speak: scenario generation ---
+export const SPEAK_SCENARIO_SYSTEM_PROMPT = `You are a language teacher designing short spoken-conversation drills.
+Given a student's language, level, and current topic, invent one realistic everyday situation and a single line
+they must say out loud in the target language to handle it. Keep it concrete, short, and speakable in one breath.`;
+
+export function buildSpeakScenarioPrompt(
+  language: string,
+  level: string,
+  topic: string,
+  nativeLanguage = "english",
+): string {
+  const N = nativeLanguage;
+  return `Create one spoken-practice scenario for a ${level}-level ${language} student currently studying "${topic}".
+
+Return ONLY valid JSON:
+{
+  "situation": "1-2 sentences in ${N} setting the scene (where the student is, who they are talking to)",
+  "prompt": "1 sentence in ${N} telling the student exactly what to say out loud, e.g. 'Ask the waiter for the check'",
+  "sampleResponse": "one natural ${language} sentence that correctly accomplishes the prompt, appropriate for ${level} level"
+}`;
+}
+
+// --- Speak: grading a transcribed spoken response ---
+export const SPEAK_GRADE_SYSTEM_PROMPT = `You are an encouraging language speaking coach. A student was given a
+real-life scenario and asked to say something out loud in their target language; their speech was transcribed by
+an ASR system, which may contain minor transcription errors. Judge intent and correctness generously — do not
+penalize likely ASR misspellings or missing accents/punctuation. Return ONLY valid JSON.`;
+
+export function buildSpeakGradePrompt({
+  language,
+  situation,
+  prompt,
+  transcript,
+  nativeLanguage = "english",
+}: {
+  language: string;
+  situation: string;
+  prompt: string;
+  transcript: string;
+  nativeLanguage?: string;
+}): string {
+  const N = nativeLanguage;
+  return `Scenario (in ${N}): ${situation}
+Task (in ${N}): ${prompt}
+Student's ${language} speech, as transcribed: "${transcript}"
+
+Judge whether the student accomplished the task in understandable, reasonably correct ${language}.
+Be lenient about minor grammar slips and ASR transcription noise; focus on whether the intent lands.
+
+Return ONLY valid JSON:
+{
+  "correct": true|false,
+  "feedback": "one or two encouraging sentences in ${N} on what worked and what to improve",
+  "corrected": "a cleaned-up, correct ${language} version of what they meant to say, or null if already correct"
+}`;
+}

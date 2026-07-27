@@ -40,16 +40,18 @@ export function preloadSpeech(text: string, langCode: string) {
   audioCache.set(url, audio);
 }
 
-export function speakText(text: string, langCode: string) {
+export function speakText(text: string, langCode: string): HTMLAudioElement {
   if (currentAudio) {
     currentAudio.pause();
     currentAudio = null;
   }
   const url = ttsUrl(text, langCode);
   const audio = audioCache.get(url) ?? new Audio(url);
+  audioCache.set(url, audio);
   currentAudio = audio;
   audio.currentTime = 0;
   audio.play().catch(() => null);
+  return audio;
 }
 
 // ── Translation localStorage cache ────────────────────────────────────────────
