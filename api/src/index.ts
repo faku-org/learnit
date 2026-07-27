@@ -79,6 +79,7 @@ const EXERCISE_TYPES: ExerciseType[] = [
   "translation",
   "conjugation",
   "matching",
+  "word_order",
 ];
 
 function pickNextType(recentTypes: string[]): ExerciseType {
@@ -599,7 +600,7 @@ const app = new Elysia()
       return { error: "language and topic are required" };
     }
     const validTypes: ExerciseType[] = [
-      "multiple_choice", "fill_blank", "translation", "conjugation", "matching",
+      "multiple_choice", "fill_blank", "translation", "conjugation", "matching", "word_order",
     ];
     if (!validTypes.includes(type)) {
       set.status = 400;
@@ -646,9 +647,11 @@ const app = new Elysia()
     const topicKey = `${language.toLowerCase()}:${topic.toLowerCase()}:${level}`;
     const now = new Date().toISOString();
 
-    // 1. Due SRS cards for this topic
+    // 1. Due SRS cards for this topic (exclude cards not yet answered — lastScore -1
+    // is a placeholder set when an exercise is first served, so it doesn't cause a
+    // still-unanswered exercise to be re-served as if it were due for review)
     const dueCard = await db.collection("user_exercises").findOne(
-      { userId: user.userId, topicKey, dueDate: { $lte: now } },
+      { userId: user.userId, topicKey, dueDate: { $lte: now }, lastScore: { $ne: -1 } },
       { sort: { dueDate: 1 } },
     );
     if (dueCard) {

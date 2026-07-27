@@ -226,6 +226,7 @@ export function buildExplainPrompt(
   if (exercise.question) lines.push(`Question: ${exercise.question}`);
   if (exercise.sentence) lines.push(`Sentence: ${exercise.sentence}`);
   if (exercise.sourceText) lines.push(`Text: ${exercise.sourceText}`);
+  if (exercise.words) lines.push(`Scrambled words: ${(exercise.words as string[]).join(" / ")}`);
   if (type === "multiple_choice" && exercise.options)
     lines.push(`Options: ${(exercise.options as string[]).join(" / ")}`);
   lines.push(`Correct answer: ${String(correctAnswer ?? "")}`);
@@ -253,7 +254,8 @@ export type ExerciseType =
   | "fill_blank"
   | "translation"
   | "conjugation"
-  | "matching";
+  | "matching"
+  | "word_order";
 
 export type WordMeaning = {
   word: string;
@@ -363,6 +365,21 @@ Return JSON:
   "explanation": "Brief notes on the vocabulary (write in ${N})",
   "wordMeanings": []
 }`,
+
+    word_order: `Create a word-ordering exercise (like arranging scrambled words into a sentence) in ${language}.
+Return JSON:
+{
+  "type": "word_order",
+  "icon": "a single PascalCase Lucide icon name that best represents what this exercise is about (e.g. UtensilsCrossed, MapPin, Heart, Clock, Users)",
+  "context": "One sentence in ${N}: what real-life scenario this exercise represents AND what specific grammar/vocabulary concept it tests. E.g. 'Ordering food at a restaurant — tests basic word order for requests'",
+  "instruction": "Put the words in order to form a correct sentence (write instruction in ${N})",
+  "words": ["word1", "word2", "word3", "word4"],
+  "correctAnswer": "word1 word2 word3 word4",
+  "explanation": "Why this word order is correct (write explanation in ${N})",
+  ${wordMeaningsSchema}
+}
+"words" must be the individual tokens of the correct ${language} sentence, given in the CORRECT order (do NOT shuffle them — the client shuffles for display). Each element is one word or particle as it would naturally be segmented in ${language} (for languages without spaces like Japanese or Chinese, split into meaningful word/particle units, not individual characters). Use 4-8 words. "correctAnswer" is the same sentence written naturally with correct spacing/punctuation for ${language}.
+${wordMeaningsNote} Annotate words from the "correctAnswer" field.`,
   };
 
   const difficultySection = difficultyNote ? `\nDIFFICULTY NOTE: ${difficultyNote}\n` : "";
