@@ -4,7 +4,8 @@
   "version": "0.0.1",
   "scripts": {
     "dev": "bun run --preload ./src/preload.ts --watch src/index.ts",
-    "start": "bun run --preload ./src/preload.ts src/index.ts"
+    "start": "bun run --preload ./src/preload.ts src/index.ts",
+    "migrate": "bun run --preload ./src/preload.ts src/migrate-taxonomy.ts"
   },
   "dependencies": {
     "@elysiajs/cors": "^1.2.0",

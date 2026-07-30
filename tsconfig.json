@@ -1,11 +1,11 @@
 {
   "extends": "astro/tsconfigs/strict",
   "compilerOptions": {
-    "baseUrl": ".",
+    // No baseUrl: it was removed in TypeScript 7. Path mappings now resolve
+    // relative to this file, which is what "./src/*" already assumed.
     "paths": {
       "@/*": ["./src/*"]
-    },
-    "ignoreDeprecations": "6.0"
+    }
   },
   "include": [".astro/types.d.ts", "**/*"],
   "exclude": ["dist", "api"]

@@ -1,16 +1,19 @@
+import { useEffect, useState } from "react";
 import { motion } from "motion/react";
 import { Home, Target, BookOpen, Mic, Library, Settings, History } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getCurrentPath } from "@/lib/api";
+import { isLanguagePath, taxonomyOf } from "@/lib/domains";
 import { useTranslation } from "react-i18next";
 import "@/lib/i18n";
 
 const NAV_ITEMS = [
-  { href: "/", icon: Home, labelKey: "sidebar.dashboard" },
-  { href: "/goals", icon: Target, labelKey: "sidebar.goals" },
-  { href: "/learn", icon: BookOpen, labelKey: "sidebar.learn" },
-  { href: "/exercises", icon: History, labelKey: "sidebar.exercises" },
-  { href: "/speak", icon: Mic, labelKey: "sidebar.speak" },
-  { href: "/vocabulary", icon: Library, labelKey: "sidebar.vocabulary" },
+  { href: "/", icon: Home, labelKey: "sidebar.dashboard", languageOnly: false },
+  { href: "/goals", icon: Target, labelKey: "sidebar.goals", languageOnly: false },
+  { href: "/learn", icon: BookOpen, labelKey: "sidebar.learn", languageOnly: false },
+  { href: "/exercises", icon: History, labelKey: "sidebar.exercises", languageOnly: false },
+  { href: "/speak", icon: Mic, labelKey: "sidebar.speak", languageOnly: true },
+  { href: "/vocabulary", icon: Library, labelKey: "sidebar.vocabulary", languageOnly: true },
 ] as const;
 
 interface SidebarProps {
@@ -19,6 +22,18 @@ interface SidebarProps {
 
 export function Sidebar({ currentPath }: SidebarProps) {
   const { t } = useTranslation();
+  // Speak and Vocabulary only apply to a language path. Until the active path is
+  // known they stay visible, so the nav never flickers items away on load.
+  const [languageMode, setLanguageMode] = useState(true);
+
+  useEffect(() => {
+    getCurrentPath()
+      .then((path) => setLanguageMode(isLanguagePath(taxonomyOf(path as never))))
+      .catch(() => setLanguageMode(true));
+  }, []);
+
+  const items = NAV_ITEMS.filter((item) => !item.languageOnly || languageMode);
+
   const isActive = (href: string) =>
     href === "/" ? currentPath === "/" : currentPath.startsWith(href);
 
@@ -41,7 +56,7 @@ export function Sidebar({ currentPath }: SidebarProps) {
       </motion.a>
 
       <nav className="flex flex-col gap-1 w-full px-2 flex-1">
-        {NAV_ITEMS.map(({ href, icon: Icon, labelKey }, i) => (
+        {items.map(({ href, icon: Icon, labelKey }, i) => (
           <motion.a
             key={href}
             href={href}

@@ -6,31 +6,39 @@ import { connectDB, getDB } from "./db";
 import {
   GoalSchema,
   VocabularySchema,
-  PreferencesSchema,
+  subjectOf,
+  bankKeyOf,
+  topicKeyOf,
   type Attempt,
   type TopicSession,
 } from "./schemas";
 import { generateJSON, validateExercise, PRO_MODEL } from "./llm";
+import { seedTaxonomy, bumpPathCount, allNodes } from "./taxonomy";
+import { isLanguagePath, type ExerciseType } from "./domains";
+import { classifySubject, classificationFor, checkScope, buildSubjectContext } from "./classify";
+import {
+  pathOutlinePrompt,
+  moduleTopicsPrompt,
+  exercisePrompt,
+  calibrationStagePrompt,
+  pickNextType,
+  type SubjectContext,
+} from "./prompt-router";
+import {
+  CALIBRATION_BLUEPRINT_SYSTEM_PROMPT,
+  buildCalibrationBlueprintPrompt,
+} from "./prompts-general";
 import { synthesizeSpeechXai, transcribeSpeechXai, createRealtimeTokenXai } from "./xaiVoice";
 import {
-  PATH_OUTLINE_SYSTEM_PROMPT,
-  buildPathOutlinePrompt,
-  MODULE_TOPICS_SYSTEM_PROMPT,
-  buildModuleTopicsPrompt,
-  EXERCISE_SYSTEM_PROMPT,
-  buildExercisePrompt,
   EXPLAIN_SYSTEM_PROMPT,
   buildExplainPrompt,
   VOCAB_ENRICH_SYSTEM_PROMPT,
   buildVocabEnrichPrompt,
-  CALIBRATION_SYSTEM_PROMPT,
-  buildCalibrationStagePrompt,
   CALIBRATION_STAGE_SIZE,
   SPEAK_SCENARIO_SYSTEM_PROMPT,
   buildSpeakScenarioPrompt,
   SPEAK_GRADE_SYSTEM_PROMPT,
   buildSpeakGradePrompt,
-  type ExerciseType,
   type CalibrationLevel,
   type CalibrationProbeLevel,
   type ModulePerformance,
@@ -114,27 +122,15 @@ function computeDifficultyNote(recentScores: number[], bias: number): string | u
   return undefined;
 }
 
-// Type rotation for varied exercise selection
-const EXERCISE_TYPES: ExerciseType[] = [
-  "multiple_choice",
-  "fill_blank",
-  "translation",
-  "conjugation",
-  "matching",
-  "reading_comprehension",
-  "word_order",
-];
-
-function pickNextType(recentTypes: string[]): ExerciseType {
-  const counts: Record<string, number> = {};
-  for (const t of EXERCISE_TYPES) counts[t] = 0;
-  for (const t of recentTypes) if (t in counts) counts[t]++;
-  return EXERCISE_TYPES.reduce((a, b) => (counts[a] <= counts[b] ? a : b));
-}
-
 // ── Segmented path generation ─────────────────────────────────────────────────
 
-type PathTopic = { name: string; order: number; description?: string };
+type PathTopic = {
+  name: string;
+  order: number;
+  description?: string;
+  /** Named concepts this topic rests on. Feeds the knowledge graph. */
+  concepts?: string[];
+};
 type PathModule = {
   name: string;
   description?: string;
@@ -143,7 +139,11 @@ type PathModule = {
   topics?: PathTopic[];
 };
 type StoredPath = {
-  language: string;
+  /** Present on paths created before the taxonomy work. Read via subjectOf. */
+  language?: string;
+  subject?: string;
+  taxonomy?: string[];
+  taxonomyLeaf?: string;
   objective: string;
   startingLevel?: CalibrationLevel;
   modules: PathModule[];
@@ -166,38 +166,126 @@ function aggregatePerformance(topicStats: TopicStats | undefined): ModulePerform
 
 /** Generate the topics for a single module of an already-outlined path. */
 async function generateModuleTopics(
+  ctx: SubjectContext,
   path: StoredPath,
   order: number,
   performance: ModulePerformance | null,
 ): Promise<PathTopic[]> {
   const idx = order - 1;
   const module = path.modules[idx];
-  const { topics } = await generateJSON<{ topics: PathTopic[] }>(
-    MODULE_TOPICS_SYSTEM_PROMPT,
-    buildModuleTopicsPrompt({
-      language: path.language,
-      objective: path.objective,
-      startingLevel: path.startingLevel ?? "complete_beginner",
-      module: {
-        name: module.name,
-        description: module.description,
-        focus: module.focus,
-        order,
-      },
-      previousModules: path.modules.slice(0, idx).map((m) => m.name),
-      nextModule: path.modules[idx + 1]?.name ?? null,
-      coveredTopics: path.modules
-        .slice(0, idx)
-        .flatMap((m) => (m.topics ?? []).map((t) => t.name)),
-      performance,
-    }),
-    { temperature: 0.7, maxTokens: 2048 },
-  );
+  const { system, user } = moduleTopicsPrompt(ctx, {
+    objective: path.objective,
+    startingLevel: path.startingLevel ?? "complete_beginner",
+    module: {
+      name: module.name,
+      description: module.description,
+      focus: module.focus,
+      order,
+    },
+    previousModules: path.modules.slice(0, idx).map((m) => m.name),
+    nextModule: path.modules[idx + 1]?.name ?? null,
+    coveredTopics: path.modules
+      .slice(0, idx)
+      .flatMap((m) => (m.topics ?? []).map((t) => t.name)),
+    performance,
+  });
+  const { topics } = await generateJSON<{ topics: PathTopic[] }>(system, user, {
+    temperature: 0.7,
+    maxTokens: 2048,
+  });
   return topics.map((t, i) => ({
     name: t.name,
     order: t.order ?? i + 1,
     description: t.description,
+    ...(t.concepts && t.concepts.length > 0 ? { concepts: t.concepts } : {}),
   }));
+}
+
+/** Subject context for a stored path, tolerating pre-migration documents. */
+async function contextForPath(
+  db: Db,
+  path: StoredPath,
+  nativeLanguage: string,
+): Promise<SubjectContext> {
+  const identity = subjectOf(path);
+  return buildSubjectContext(db, {
+    subject: identity.subject,
+    taxonomy: identity.taxonomy,
+    nativeLanguage,
+  });
+}
+
+async function nativeLanguageOf(db: Db, userId: string): Promise<string> {
+  const prefs = await db.collection("preferences").findOne({ userId });
+  return (prefs?.nativeLanguage as string | undefined) ?? "english";
+}
+
+// ── Calibration blueprints ────────────────────────────────────────────────────
+
+type CalibrationBlueprint = Record<CalibrationProbeLevel, string[]>;
+
+const BLUEPRINT_FALLBACK: CalibrationBlueprint = {
+  beginner: ["Core vocabulary of the field", "What the field studies", "Basic definitions"],
+  elementary: ["Foundational principles", "Standard notation and terms", "Simple applications"],
+  intermediate: ["Working methods of the field", "Relating two core ideas", "Typical problem solving"],
+  advanced: ["Edge cases and exceptions", "Competing frameworks", "Synthesis across subfields"],
+};
+
+/**
+ * Probe topics for one stage, drawn from a blueprint shared across every user
+ * studying this subject. Generation happens once per subject, not once per
+ * path, so the cost falls toward zero as the bank fills.
+ */
+async function probeTopicsFor(
+  db: Db,
+  ctx: SubjectContext,
+  probeLevel: CalibrationProbeLevel,
+  usedTopics: string[],
+): Promise<string[]> {
+  const key = ctx.taxonomy[ctx.taxonomy.length - 1];
+  const col = db.collection("calibration_blueprints");
+  let doc = await col.findOne({ taxonomyLeaf: key });
+
+  if (!doc) {
+    try {
+      const generated = await generateJSON<{ levels: CalibrationBlueprint }>(
+        CALIBRATION_BLUEPRINT_SYSTEM_PROMPT,
+        buildCalibrationBlueprintPrompt(ctx),
+        { temperature: 0.6, maxTokens: 2048, model: PRO_MODEL },
+      );
+      const insert = {
+        taxonomyLeaf: key,
+        subject: ctx.subject,
+        levels: generated.levels,
+        usageCount: 0,
+        createdAt: new Date().toISOString(),
+      };
+      await col.updateOne({ taxonomyLeaf: key }, { $setOnInsert: insert }, { upsert: true });
+      doc = await col.findOne({ taxonomyLeaf: key });
+    } catch {
+      // A subject whose blueprint cannot be written still gets a usable, if
+      // generic, placement test rather than no test at all.
+      return BLUEPRINT_FALLBACK[probeLevel].slice(0, CALIBRATION_STAGE_SIZE);
+    }
+  }
+
+  await col.updateOne({ taxonomyLeaf: key }, { $inc: { usageCount: 1 } });
+
+  const levels = (doc?.levels ?? {}) as Partial<CalibrationBlueprint>;
+  const pool = levels[probeLevel] ?? BLUEPRINT_FALLBACK[probeLevel];
+  const used = new Set(usedTopics);
+  const available = pool.filter((t) => !used.has(t));
+  return sampleN(available.length >= CALIBRATION_STAGE_SIZE ? available : pool, CALIBRATION_STAGE_SIZE);
+}
+
+/** Fisher-Yates on a copy, so variety never depends on the model. */
+function sampleN<T>(pool: T[], n: number): T[] {
+  const copy = [...pool];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy.slice(0, n);
 }
 
 // ── Stats helpers ─────────────────────────────────────────────────────────────
@@ -285,7 +373,8 @@ async function requireUser(
 const app = new Elysia()
   .use(cors({ origin: process.env.APP_URL ?? "http://localhost:4321" }))
   .onStart(async () => {
-    await connectDB();
+    const db = await connectDB();
+    await seedTaxonomy(db);
   })
 
   .get("/api/health", () => ({
@@ -557,18 +646,46 @@ const app = new Elysia()
     const user = await requireUser(headers.authorization, set);
     if (!user) return { error: "Unauthorized" };
     const {
+      subject: subjectInput,
       language,
+      taxonomyLeaf,
       nativeLanguage = "english",
       probeLevel = "beginner",
       stage = 1,
       usedTopics = [],
       askedQuestions = [],
     } = body;
-    if (!language) {
+    const subject = subjectInput ?? language;
+    if (!subject) {
       set.status = 400;
-      return { error: "language is required" };
+      return { error: "subject is required" };
     }
+    const db = await getDB();
     try {
+      const classification = taxonomyLeaf
+        ? await classificationFor(db, taxonomyLeaf)
+        : await classifySubject(db, subject, "");
+      const ctx = await buildSubjectContext(db, {
+        subject,
+        taxonomy: classification.taxonomy,
+        nativeLanguage,
+      });
+
+      // The language family owns its static probe pools and samples them inside
+      // the builder. Every other subject draws from a generated blueprint.
+      const topics = isLanguagePath(classification.taxonomy)
+        ? []
+        : await probeTopicsFor(db, ctx, probeLevel as CalibrationProbeLevel, usedTopics);
+
+      const { system, user: prompt } = calibrationStagePrompt(ctx, {
+        probeLevel: probeLevel as CalibrationProbeLevel,
+        stage,
+        topics,
+        usedTopics,
+        askedQuestions,
+        stageSize: CALIBRATION_STAGE_SIZE,
+      });
+
       const result = await generateJSON<{
         questions: {
           topic: string;
@@ -578,15 +695,8 @@ const app = new Elysia()
           correctIndex: number;
         }[];
       }>(
-        CALIBRATION_SYSTEM_PROMPT,
-        buildCalibrationStagePrompt({
-          language,
-          nativeLanguage,
-          probeLevel: probeLevel as CalibrationProbeLevel,
-          stage,
-          usedTopics,
-          askedQuestions,
-        }),
+        system,
+        prompt,
         // deepseek-v4-flash is a reasoning model: hidden reasoning_tokens are
         // deducted from this same budget before any visible content is written,
         // and that spend is highly variable (observed 400-1800+ tokens across
@@ -612,28 +722,47 @@ const app = new Elysia()
     const user = await requireUser(headers.authorization, set);
     if (!user) return { error: "Unauthorized" };
     const {
+      // `language` is the pre-taxonomy field name, still accepted so an older
+      // client keeps working against a newer server.
+      subject: subjectInput,
       language,
+      taxonomyLeaf,
       objective,
       timeframe,
       modules = 10,
       startingLevel = "complete_beginner",
     } = body;
-    if (!language || !objective) {
+    const subject = subjectInput ?? language;
+    if (!subject || !objective) {
       set.status = 400;
-      return { error: "language and objective are required" };
+      return { error: "subject and objective are required" };
     }
+    const db = await getDB();
     try {
-      const outline = await generateJSON<{ modules: PathModule[] }>(
-        PATH_OUTLINE_SYSTEM_PROMPT,
-        buildPathOutlinePrompt(
-          language,
-          objective,
-          timeframe ?? "",
-          modules,
-          startingLevel as CalibrationLevel,
-        ),
-        { temperature: 0.7, maxTokens: 3000, model: PRO_MODEL },
-      );
+      // A client that already ran /api/taxonomy/classify sends the leaf back so
+      // the user's correction to the breadcrumb is respected and the classifier
+      // is not paid for twice.
+      const classification = taxonomyLeaf
+        ? await classificationFor(db, taxonomyLeaf)
+        : await classifySubject(db, subject, objective);
+
+      const ctx = await buildSubjectContext(db, {
+        subject,
+        taxonomy: classification.taxonomy,
+        nativeLanguage: await nativeLanguageOf(db, user.userId),
+      });
+
+      const { system, user: prompt } = pathOutlinePrompt(ctx, {
+        objective,
+        timeframe: timeframe ?? "",
+        moduleCount: modules,
+        startingLevel: startingLevel as CalibrationLevel,
+      });
+      const outline = await generateJSON<{ modules: PathModule[] }>(system, prompt, {
+        temperature: 0.7,
+        maxTokens: 3000,
+        model: PRO_MODEL,
+      });
 
       const normalized: PathModule[] = outline.modules.map((m, i) => ({
         name: m.name,
@@ -647,21 +776,29 @@ const app = new Elysia()
       }
 
       const draft: StoredPath = {
-        language,
+        subject,
+        taxonomy: classification.taxonomy,
+        taxonomyLeaf: classification.taxonomyLeaf,
         objective,
         startingLevel: startingLevel as CalibrationLevel,
         modules: normalized,
       };
       // Module 1 has no performance history yet, so it is pitched purely off the
-      // calibration result. Failure here is non-fatal — it can be hydrated later.
+      // calibration result. Failure here is non-fatal: it can be hydrated later.
       try {
-        normalized[0].topics = await generateModuleTopics(draft, 1, null);
+        normalized[0].topics = await generateModuleTopics(ctx, draft, 1, null);
       } catch { /* left unhydrated */ }
 
-      const db = await getDB();
       const doc = {
         userId: user.userId,
-        language,
+        subject,
+        // Written for as long as anything might still read the old field.
+        language: isLanguagePath(classification.taxonomy) ? subject : null,
+        taxonomy: classification.taxonomy,
+        taxonomyLeaf: classification.taxonomyLeaf,
+        // Pinned once. Everything this path ever generates keys off it, so it
+        // must not move when the taxonomy placement is later corrected.
+        bankKey: classification.taxonomyLeaf,
         objective,
         timeframe: timeframe ?? null,
         startingLevel,
@@ -669,11 +806,61 @@ const app = new Elysia()
         createdAt: new Date().toISOString(),
       };
       const result = await db.collection("paths").insertOne(doc);
-      return { _id: result.insertedId.toString(), ...doc };
+      await bumpPathCount(db, classification.taxonomy);
+      return { _id: result.insertedId.toString(), ...doc, breadcrumb: classification.breadcrumb };
     } catch (err) {
       set.status = 500;
       return { error: "LLM generation failed", detail: String(err) };
     }
+  })
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Taxonomy
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // Place a subject in the tree. Returns a breadcrumb the user can correct
+  // before committing to generation.
+  .post("/api/taxonomy/classify", async ({ body, headers, set }: any) => {
+    const user = await requireUser(headers.authorization, set);
+    if (!user) return { error: "Unauthorized" };
+    const { subject, objective = "" } = body as { subject?: string; objective?: string };
+    if (!subject) {
+      set.status = 400;
+      return { error: "subject is required" };
+    }
+    const db = await getDB();
+    return classifySubject(db, subject, objective);
+  })
+
+  // Judge whether a goal is narrow enough to plan. Non-blocking: a `workable`
+  // verdict is returned when the check itself fails.
+  .post("/api/taxonomy/scope", async ({ body, headers, set }: any) => {
+    const user = await requireUser(headers.authorization, set);
+    if (!user) return { error: "Unauthorized" };
+    const { subject, objective } = body as { subject?: string; objective?: string };
+    if (!subject || !objective) {
+      set.status = 400;
+      return { error: "subject and objective are required" };
+    }
+    const db = await getDB();
+    return checkScope(subject, objective, await nativeLanguageOf(db, user.userId));
+  })
+
+  // The whole tree, for the breadcrumb picker.
+  .get("/api/taxonomy/tree", async ({ headers, set }: any) => {
+    const user = await requireUser(headers.authorization, set);
+    if (!user) return { error: "Unauthorized" };
+    const db = await getDB();
+    const nodes = await allNodes(db);
+    return [...nodes.values()]
+      .map((n) => ({
+        id: n.id,
+        parentId: n.parentId,
+        name: n.name,
+        depth: n.depth,
+        pathCount: n.pathCount,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
   })
 
   // Fill in the topics of one outlined module, adapting to performance so far.
@@ -715,7 +902,8 @@ const app = new Elysia()
         progress && progress.pathId === params.id
           ? aggregatePerformance(progress.topicStats as TopicStats | undefined)
           : null;
-      const topics = await generateModuleTopics(path, order, performance);
+      const ctx = await contextForPath(db, path, await nativeLanguageOf(db, user.userId));
+      const topics = await generateModuleTopics(ctx, path, order, performance);
       await db
         .collection("paths")
         .updateOne(
@@ -841,20 +1029,32 @@ const app = new Elysia()
     const user = await requireUser(headers.authorization, set);
     if (!user) return { error: "Unauthorized" };
     const {
-      topic, language, type, q,
+      topic, language, subject, taxonomyLeaf, type, q,
       limit = "20", skip = "0",
     } = query as Record<string, string>;
     const filter: Record<string, unknown> = {};
+    // Both the subject filter and the free-text search are disjunctions, so they
+    // are collected and combined rather than each writing $or directly.
+    const clauses: Record<string, unknown>[] = [];
     if (topic) filter.topic = { $regex: topic, $options: "i" };
-    if (language) filter.language = language;
     if (type) filter.type = type;
-    if (q) {
-      filter.$or = [
-        { topic: { $regex: q, $options: "i" } },
-        { instruction: { $regex: q, $options: "i" } },
-        { tags: { $in: [q.toLowerCase()] } },
-      ];
+    if (taxonomyLeaf) filter.taxonomyLeaf = taxonomyLeaf;
+    // `language` still matches pre-taxonomy documents, which carry no leaf.
+    else if (subject ?? language) {
+      const name = subject ?? language;
+      clauses.push({ $or: [{ subject: name }, { language: name }] });
     }
+    if (q) {
+      clauses.push({
+        $or: [
+          { topic: { $regex: q, $options: "i" } },
+          { instruction: { $regex: q, $options: "i" } },
+          { tags: { $in: [q.toLowerCase()] } },
+        ],
+      });
+    }
+    if (clauses.length === 1) Object.assign(filter, clauses[0]);
+    else if (clauses.length > 1) filter.$and = clauses;
     const db = await getDB();
     const [exercises, total] = await Promise.all([
       db.collection("exercises").find(filter).sort({ createdAt: -1 })
@@ -869,31 +1069,54 @@ const app = new Elysia()
     const user = await requireUser(headers.authorization, set);
     if (!user) return { error: "Unauthorized" };
     const {
-      language, level = "beginner", topic, type = "multiple_choice",
+      subject: subjectInput, language, taxonomyLeaf, bankKey: bankKeyInput,
+      level = "beginner", topic, type = "multiple_choice",
       nativeLanguage = "english",
     } = body;
-    if (!language || !topic) {
+    const subject = subjectInput ?? language;
+    if (!subject || !topic) {
       set.status = 400;
-      return { error: "language and topic are required" };
+      return { error: "subject and topic are required" };
     }
-    const validTypes: ExerciseType[] = [
-      "multiple_choice", "fill_blank", "translation", "conjugation", "matching", "reading_comprehension", "word_order",
-    ];
-    if (!validTypes.includes(type)) {
-      set.status = 400;
-      return { error: `Invalid type. Use: ${validTypes.join(", ")}` };
-    }
+    const db = await getDB();
     try {
-      const exercise = await generateJSON<Record<string, unknown>>(
-        EXERCISE_SYSTEM_PROMPT,
-        buildExercisePrompt(language, level, topic, type as ExerciseType, nativeLanguage),
-        { temperature: 0.9, maxTokens: 2048 },
-      );
-      const db = await getDB();
+      const classification = taxonomyLeaf
+        ? await classificationFor(db, taxonomyLeaf)
+        : await classifySubject(db, subject, "");
+      const ctx = await buildSubjectContext(db, {
+        subject,
+        taxonomy: classification.taxonomy,
+        nativeLanguage,
+      });
+
+      if (!ctx.spec.exerciseTypes.includes(type as ExerciseType)) {
+        set.status = 400;
+        return { error: `Invalid type for this subject. Use: ${ctx.spec.exerciseTypes.join(", ")}` };
+      }
+
+      const { system, user: prompt } = exercisePrompt(ctx, {
+        level,
+        topic,
+        type: type as ExerciseType,
+      });
+      const exercise = await generateJSON<Record<string, unknown>>(system, prompt, {
+        temperature: 0.9,
+        maxTokens: 2048,
+      });
+
+      const leaf = classification.taxonomyLeaf;
+      // A path created before the taxonomy work pins its own key; a new one
+      // pins to the canonical leaf so every student of the subject shares a bank.
+      const bank = (bankKeyInput as string | undefined) ?? leaf;
       const doc = {
-        language, level, topic,
-        topicKey: `${language.toLowerCase()}:${topic.toLowerCase()}:${level}`,
-        tags: [topic.toLowerCase(), type, language.toLowerCase(), level],
+        subject,
+        language: isLanguagePath(classification.taxonomy) ? subject : null,
+        taxonomy: classification.taxonomy,
+        taxonomyLeaf: leaf,
+        level, topic,
+        bankKey: bank,
+        topicKey: topicKeyOf(bank, topic, level),
+        tags: [topic.toLowerCase(), type, leaf, level],
         ...exercise,
         createdAt: new Date().toISOString(),
       };
@@ -912,16 +1135,28 @@ const app = new Elysia()
     if (!user) return { error: "Unauthorized" };
 
     const {
-      language, topic, level = "beginner", nativeLanguage = "english",
+      subject: subjectInput, language, taxonomyLeaf, bankKey: bankKeyInput,
+      topic, level = "beginner", nativeLanguage = "english",
     } = query as Record<string, string>;
+    const subject = subjectInput ?? language;
 
-    if (!language || !topic) {
+    if (!subject || !topic) {
       set.status = 400;
-      return { error: "language and topic are required" };
+      return { error: "subject and topic are required" };
     }
 
     const db = await getDB();
-    const topicKey = `${language.toLowerCase()}:${topic.toLowerCase()}:${level}`;
+    const classification = taxonomyLeaf
+      ? await classificationFor(db, taxonomyLeaf)
+      : await classifySubject(db, subject, "");
+    const ctx = await buildSubjectContext(db, {
+      subject,
+      taxonomy: classification.taxonomy,
+      nativeLanguage,
+    });
+    const leaf = classification.taxonomyLeaf;
+    const bank = (bankKeyInput as string | undefined) ?? leaf;
+    const topicKey = topicKeyOf(bank, topic, level);
     const now = new Date().toISOString();
 
     // 1. Due SRS cards for this topic (exclude cards not yet answered — lastScore -1
@@ -962,7 +1197,7 @@ const app = new Elysia()
       .project({ exerciseType: 1 })
       .toArray();
     const recentTypes = recentTypesDocs.map((d) => d.exerciseType as string).filter(Boolean);
-    const nextType = pickNextType(recentTypes);
+    const nextType = pickNextType(ctx.spec, recentTypes);
 
     const unseen = await db.collection("exercises").findOne({
       topicKey,
@@ -1003,32 +1238,35 @@ const app = new Elysia()
 
     const difficultyNote = computeDifficultyNote(recentScores, bias);
 
-    let exercise = await generateJSON<Record<string, unknown>>(
-      EXERCISE_SYSTEM_PROMPT,
-      buildExercisePrompt(
-        language, level, topic, nextType, nativeLanguage, difficultyNote,
-      ),
-      { temperature: 0.9, maxTokens: 2048 },
-    );
+    const built = exercisePrompt(ctx, { level, topic, type: nextType, difficultyNote });
+    let exercise = await generateJSON<Record<string, unknown>>(built.system, built.user, {
+      temperature: 0.9,
+      maxTokens: 2048,
+    });
 
-    // Validate — correct in-place if fixable, regenerate once if not
-    const validation = await validateExercise(exercise, language, level, topic);
+    // Validate: correct in-place if fixable, regenerate once if not
+    const validation = await validateExercise(exercise, subject, level, topic);
     if (!validation.valid) {
       if (validation.corrected) {
         exercise = { ...exercise, ...validation.corrected };
       } else {
-        exercise = await generateJSON<Record<string, unknown>>(
-          EXERCISE_SYSTEM_PROMPT,
-          buildExercisePrompt(language, level, topic, nextType, nativeLanguage),
-          { temperature: 0.7, maxTokens: 2048 },
-        );
+        const retry = exercisePrompt(ctx, { level, topic, type: nextType });
+        exercise = await generateJSON<Record<string, unknown>>(retry.system, retry.user, {
+          temperature: 0.7,
+          maxTokens: 2048,
+        });
       }
     }
 
     const doc = {
-      language, level, topic,
+      subject,
+      language: isLanguagePath(classification.taxonomy) ? subject : null,
+      taxonomy: classification.taxonomy,
+      taxonomyLeaf: leaf,
+      level, topic,
+      bankKey: bank,
       topicKey,
-      tags: [topic.toLowerCase(), nextType, language.toLowerCase(), level],
+      tags: [topic.toLowerCase(), nextType, leaf, level],
       ...exercise,
       validatedAt: new Date().toISOString(),
       createdAt: new Date().toISOString(),
@@ -1064,6 +1302,10 @@ const app = new Elysia()
       // Optional stats context. Absent for callers that only want the SM-2 update.
       pathId = null, moduleIndex, topicIndex, topicName, moduleName,
       exerciseType, durationMs = 0, gaveUp = false,
+      // MindVault memory fields. All optional: an older client omits them and
+      // the attempt still records, just with less context.
+      confidence = null, conceptIds = [], gradingMode = "exact", score,
+      examId = null, sessionPosition = 0, afterGiveUp = false, inExam = false,
     } = body as {
       exerciseId: string;
       correct: boolean;
@@ -1076,6 +1318,14 @@ const app = new Elysia()
       exerciseType?: string;
       durationMs?: number;
       gaveUp?: boolean;
+      confidence?: number | null;
+      conceptIds?: string[];
+      gradingMode?: string;
+      score?: number;
+      examId?: string | null;
+      sessionPosition?: number;
+      afterGiveUp?: boolean;
+      inExam?: boolean;
     };
 
     if (!exerciseId) {
@@ -1083,7 +1333,16 @@ const app = new Elysia()
       return { error: "exerciseId is required" };
     }
 
-    const q = quality !== undefined ? quality : (correct ? 5 : 1);
+    // Confidence sharpens the SM-2 signal: a lucky guess and a solid answer are
+    // both "correct", but only one of them should wait six days to come back.
+    const q =
+      quality !== undefined
+        ? quality
+        : correct
+          ? confidence === null
+            ? 5
+            : confidence >= 4 ? 5 : confidence === 3 ? 4 : 3
+          : 1;
     const db = await getDB();
     const now = new Date().toISOString();
 
@@ -1110,7 +1369,17 @@ const app = new Elysia()
         userId: user.userId,
         exerciseId,
         topicKey: exercise
-          ? `${(exercise.language as string).toLowerCase()}:${(exercise.topic as string).toLowerCase()}:${exercise.level}`
+          ? topicKeyOf(
+              bankKeyOf({
+                bankKey: exercise.bankKey as string | undefined,
+                subject: exercise.subject as string | undefined,
+                language: exercise.language as string | undefined,
+                taxonomy: exercise.taxonomy as string[] | undefined,
+                taxonomyLeaf: exercise.taxonomyLeaf as string | undefined,
+              }),
+              (exercise.topic as string) ?? "",
+              (exercise.level as string) ?? "beginner",
+            )
           : "unknown",
         ease: 2.5,
         interval: 0,
@@ -1149,6 +1418,21 @@ const app = new Elysia()
       durationMs,
       points,
       createdAt: now,
+      conceptIds,
+      confidence,
+      gradingMode,
+      score: score ?? (outcome === "correct" ? 1 : 0),
+      examId,
+      context: {
+        sessionPosition,
+        timeOfDay: new Date(now).getHours(),
+        daysSinceTopicFirstSeen: Math.max(
+          0,
+          Math.round((Date.now() - new Date(session.startedAt).getTime()) / 86_400_000),
+        ),
+        afterGiveUp,
+        inExam,
+      },
     };
     await db.collection("attempts").insertOne(attempt);
 

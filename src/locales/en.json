@@ -29,7 +29,8 @@
       "swedish": "Swedish",
       "polish": "Polish",
       "turkish": "Turkish"
-    }
+    },
+    "done": "Done"
   },
   "sidebar": {
     "brand": "LearnIt!",
@@ -118,16 +119,20 @@
     "timeframePlaceholder": "e.g., 3 months, 6 months",
     "generating": "Generating...",
     "continueBtn": "Continue",
-    "calibrationTitle": "Calibration — {{language}}",
+    "calibrationTitle": "Calibrating your {{subject}} level",
     "modulesAndTopics": "{{modules}} modules · {{topics}} topics",
-    "pathTitle": "{{language}} Path",
+    "pathTitle": "Your {{subject}} path",
     "toastLangObjectiveRequired": "Language and objective are required",
     "toastActiveUpdated": "Active path updated",
     "toastUpdateActiveError": "Failed to update active path",
     "toastPathDeleted": "Path deleted",
     "toastDeleteError": "Failed to delete path",
     "toastPathGenerated": "Learning path generated!",
-    "toastGenerateError": "Failed to generate path"
+    "toastGenerateError": "Failed to generate path",
+    "subjectLabel": "What do you want to learn?",
+    "subjectPlaceholder": "Japanese, Macroeconomics, Quantum Mechanics, Roman History...",
+    "toastSubjectObjectiveRequired": "Subject and objective are required",
+    "preparing": "Preparing..."
   },
   "vocabulary": {
     "title": "Vocabulary",
@@ -211,7 +216,7 @@
     "gradingFailed": "Couldn't get feedback for that conversation."
   },
   "calibration": {
-    "personalize": "A few quick questions to personalize your {{language}} path.",
+    "personalize": "A few quick questions to personalize your {{subject}} path",
     "whyLearning": "Why are you learning?",
     "motivationTravel": "Travel & tourism",
     "motivationWork": "Work or studies",
@@ -222,12 +227,12 @@
     "dailyTime15_30": "15–30 min / day",
     "dailyTime30_60": "30–60 min / day",
     "dailyTime60Plus": "1 hour+ / day",
-    "priorExposureQuestion": "Prior exposure to {{language}}?",
+    "priorExposureQuestion": "How much {{subject}} do you already know?",
     "priorNone": "Never studied it",
     "priorLittle": "A few words/phrases",
     "priorSome": "Basics (greetings, numbers, colors)",
     "priorMore": "Simple sentences and conversations",
-    "selfRatingQuestion": "Be honest — how would you rate your {{language}}?",
+    "selfRatingQuestion": "How would you rate yourself in {{subject}}?",
     "selfRatingPoor": "Not good, honestly",
     "selfRatingOkay": "Okay, I get by",
     "selfRatingGood": "Pretty good",
@@ -330,5 +335,21 @@
     "yourNextModule": "your next module",
     "moduleDesigningDesc": "This module is being written around how you've actually been doing, so it lands at the right difficulty.",
     "moduleDesignFailedDesc": "The lesson plan for this module didn't generate. Give it another go."
+  },
+  "taxonomy": {
+    "placedIn": "Area:",
+    "change": "Change area",
+    "pickArea": "Pick the area this belongs to",
+    "newArea": "New area, added for this subject.",
+    "uncertain": "Best guess. Change it if this is not right."
+  },
+  "scoping": {
+    "cardTitle": "Narrowing down {{subject}}",
+    "titleBroad": "That is a big subject",
+    "titleNarrow": "That is quite specific",
+    "orDescribe": "Or describe it yourself",
+    "suggested": "Suggested goal",
+    "continue": "Continue",
+    "keepAsIs": "Keep as is"
   }
 }

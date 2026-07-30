@@ -29,7 +29,8 @@
       "swedish": "Sueco",
       "polish": "Polaco",
       "turkish": "Turco"
-    }
+    },
+    "done": "Listo"
   },
   "sidebar": {
     "brand": "LearnIt!",
@@ -118,16 +119,20 @@
     "timeframePlaceholder": "ej., 3 meses, 6 meses",
     "generating": "Generando...",
     "continueBtn": "Continuar",
-    "calibrationTitle": "Calibración — {{language}}",
+    "calibrationTitle": "Calibrando tu nivel de {{subject}}",
     "modulesAndTopics": "{{modules}} módulos · {{topics}} temas",
-    "pathTitle": "Camino de {{language}}",
+    "pathTitle": "Tu ruta de {{subject}}",
     "toastLangObjectiveRequired": "El idioma y el objetivo son obligatorios",
     "toastActiveUpdated": "Camino activo actualizado",
     "toastUpdateActiveError": "No se pudo actualizar el camino activo",
     "toastPathDeleted": "Camino eliminado",
     "toastDeleteError": "No se pudo eliminar el camino",
     "toastPathGenerated": "¡Camino de aprendizaje generado!",
-    "toastGenerateError": "No se pudo generar el camino"
+    "toastGenerateError": "No se pudo generar el camino",
+    "subjectLabel": "¿Qué querés aprender?",
+    "subjectPlaceholder": "Japonés, Macroeconomía, Mecánica Cuántica, Historia Romana...",
+    "toastSubjectObjectiveRequired": "La materia y el objetivo son obligatorios",
+    "preparing": "Preparando..."
   },
   "vocabulary": {
     "title": "Vocabulario",
@@ -211,7 +216,7 @@
     "gradingFailed": "No se pudo obtener la retroalimentación de esa conversación."
   },
   "calibration": {
-    "personalize": "Algunas preguntas rápidas para personalizar tu camino de {{language}}.",
+    "personalize": "Unas preguntas rápidas para personalizar tu ruta de {{subject}}",
     "whyLearning": "¿Por qué lo estás aprendiendo?",
     "motivationTravel": "Viajes y turismo",
     "motivationWork": "Trabajo o estudios",
@@ -222,12 +227,12 @@
     "dailyTime15_30": "15–30 min / día",
     "dailyTime30_60": "30–60 min / día",
     "dailyTime60Plus": "1 hora+ / día",
-    "priorExposureQuestion": "¿Experiencia previa con {{language}}?",
+    "priorExposureQuestion": "¿Cuánto sabés ya de {{subject}}?",
     "priorNone": "Nunca lo estudié",
     "priorLittle": "Algunas palabras o frases",
     "priorSome": "Básico (saludos, números, colores)",
     "priorMore": "Oraciones simples y conversaciones",
-    "selfRatingQuestion": "Sé honesto — ¿cómo calificarías tu nivel de {{language}}?",
+    "selfRatingQuestion": "¿Cómo calificarías tu nivel en {{subject}}?",
     "selfRatingPoor": "No muy bien, sinceramente",
     "selfRatingOkay": "Más o menos, me las arreglo",
     "selfRatingGood": "Bastante bien",
@@ -330,5 +335,21 @@
     "yourNextModule": "tu próximo módulo",
     "moduleDesigningDesc": "Este módulo se está escribiendo en base a cómo te ha estado yendo, para que quede en la dificultad justa.",
     "moduleDesignFailedDesc": "El plan de esta lección no se pudo generar. Intenta de nuevo."
+  },
+  "taxonomy": {
+    "placedIn": "Área:",
+    "change": "Cambiar área",
+    "pickArea": "Elegí el área a la que pertenece",
+    "newArea": "Área nueva, agregada para esta materia.",
+    "uncertain": "Es una estimación. Cambiala si no es correcta."
+  },
+  "scoping": {
+    "cardTitle": "Acotando {{subject}}",
+    "titleBroad": "Es un tema muy amplio",
+    "titleNarrow": "Es bastante específico",
+    "orDescribe": "O describilo vos mismo",
+    "suggested": "Objetivo sugerido",
+    "continue": "Continuar",
+    "keepAsIs": "Dejarlo así"
   }
 }

@@ -4,8 +4,15 @@ import { Target, ArrowRight, Loader2, Check, Trash2, Plus, ChevronLeft, Sparkles
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { generatePath, getPaths, deletePath, updatePreferences, getPreferences, type CalibrationLevel } from "@/lib/api";
+import {
+  generatePath, getPaths, deletePath, updatePreferences, getPreferences,
+  classifySubject, checkScope,
+  type CalibrationLevel, type Classification, type ScopeReport,
+} from "@/lib/api";
 import { CalibrationFlow } from "@/components/CalibrationFlow";
+import { TaxonomyBreadcrumb } from "@/components/TaxonomyBreadcrumb";
+import { ScopingQuiz } from "@/components/ScopingQuiz";
+import { subjectNameOf } from "@/lib/domains";
 import { AuthGuard } from "@/components/AuthGuard";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -31,16 +38,23 @@ type PathModule = {
 };
 type LearningPath = {
   _id: string;
-  language: string;
+  subject?: string;
+  /** Present on paths created before the taxonomy work. */
+  language?: string;
+  taxonomy?: string[];
+  taxonomyLeaf?: string;
   objective: string;
   timeframe?: string;
   modules: PathModule[];
   active?: boolean;
 };
 
+/** Which step of path creation the form is on. */
+type Stage = "form" | "scoping" | "calibration";
+
 function GoalsInner() {
   const { t } = useTranslation();
-  const [language, setLanguage] = useState("");
+  const [subject, setSubject] = useState("");
   const [objective, setObjective] = useState("");
   const [timeframe, setTimeframe] = useState("6 months");
   const [generating, setGenerating] = useState(false);
@@ -51,8 +65,11 @@ function GoalsInner() {
   const [settingActiveId, setSettingActiveId] = useState<string | null>(null);
   const [newPath, setNewPath] = useState<LearningPath | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [showCalibration, setShowCalibration] = useState(false);
+  const [stage, setStage] = useState<Stage>("form");
   const [nativeLanguage, setNativeLanguage] = useState("english");
+  const [classification, setClassification] = useState<Classification | null>(null);
+  const [scopeReport, setScopeReport] = useState<ScopeReport | null>(null);
+  const [preparing, setPreparing] = useState(false);
 
   useEffect(() => {
     Promise.allSettled([getPaths(), getPreferences()]).then(([pathsRes, prefsRes]) => {
@@ -95,30 +112,70 @@ function GoalsInner() {
     }
   };
 
-  const handleStartGenerate = () => {
-    if (!language || !objective) {
-      toast.error(t("goals.toastLangObjectiveRequired"));
+  /**
+   * Classify the subject and check the goal's scope in one pass, then route to
+   * the scoping quiz if the goal is unplannable as written, otherwise straight
+   * to calibration. Classification failure is not fatal: the server falls back
+   * to classifying at generation time.
+   */
+  const handleStartGenerate = async () => {
+    if (!subject || !objective) {
+      toast.error(t("goals.toastSubjectObjectiveRequired"));
       return;
     }
-    setShowCalibration(true);
+    setPreparing(true);
+    try {
+      const [classified, scope] = await Promise.allSettled([
+        classifySubject({ subject, objective }),
+        checkScope({ subject, objective }),
+      ]);
+      if (classified.status === "fulfilled") setClassification(classified.value);
+
+      const report = scope.status === "fulfilled" ? scope.value : null;
+      if (report && report.breadth !== "workable" && report.questions.length > 0) {
+        setScopeReport(report);
+        setStage("scoping");
+      } else {
+        setStage("calibration");
+      }
+    } catch {
+      setStage("calibration");
+    } finally {
+      setPreparing(false);
+    }
+  };
+
+  const handleScopeResolved = (refined: string) => {
+    if (refined.trim()) setObjective(refined.trim());
+    setScopeReport(null);
+    setStage("calibration");
   };
 
   const handleGenerateWithLevel = async (startingLevel: CalibrationLevel) => {
-    setShowCalibration(false);
+    setStage("form");
     setGenerating(true);
     try {
       // Only the outline and module 1 are written now; later modules are generated
       // from real performance, so the path can be longer without hitting output limits.
-      const path = await generatePath({ language, objective, timeframe, modules: 10, startingLevel });
+      const path = await generatePath({
+        subject,
+        taxonomyLeaf: classification?.taxonomyLeaf,
+        objective,
+        timeframe,
+        modules: 10,
+        startingLevel,
+      });
       const generated = path as unknown as LearningPath;
       await updatePreferences({ activePathId: generated._id });
       setActivePathId(generated._id);
       setPaths((prev) => [{ ...generated, active: true }, ...prev.map((p) => ({ ...p, active: false }))]);
       setNewPath(generated);
       setShowForm(false);
-      setLanguage("");
+      setSubject("");
       setObjective("");
       setTimeframe("6 months");
+      setClassification(null);
+      setScopeReport(null);
       toast.success(t("goals.toastPathGenerated"));
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : t("goals.toastGenerateError"));
@@ -170,7 +227,7 @@ function GoalsInner() {
                             {t("goals.active")}
                           </span>
                         )}
-                        <span className="font-medium">{path.language}</span>
+                        <span className="font-medium">{subjectNameOf(path)}</span>
                       </CardTitle>
                       <p className="text-xs text-muted-foreground mt-1 leading-snug">
                         {path.objective}
@@ -250,7 +307,7 @@ function GoalsInner() {
           )}
 
           <AnimatePresence mode="wait">
-            {!showCalibration ? (
+            {stage === "form" ? (
               <motion.div
                 key="form"
                 initial={{ opacity: 0, y: 10 }}
@@ -266,11 +323,15 @@ function GoalsInner() {
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div>
-                      <label className="text-xs text-muted-foreground mb-1 block">{t("goals.languageLabel")}</label>
+                      <label className="text-xs text-muted-foreground mb-1 block">{t("goals.subjectLabel")}</label>
                       <Input
-                        placeholder={t("goals.languagePlaceholder")}
-                        value={language}
-                        onChange={(e) => setLanguage(e.target.value)}
+                        placeholder={t("goals.subjectPlaceholder")}
+                        value={subject}
+                        onChange={(e) => {
+                          setSubject(e.target.value);
+                          // The old placement no longer describes the new subject.
+                          if (classification) setClassification(null);
+                        }}
                       />
                     </div>
                     <div>
@@ -290,13 +351,21 @@ function GoalsInner() {
                       />
                     </div>
                     <div className="flex gap-2">
-                      <Button onClick={handleStartGenerate} disabled={generating} className="flex-1 gap-2">
-                        {generating ? (
+                      <Button
+                        onClick={handleStartGenerate}
+                        disabled={generating || preparing}
+                        className="flex-1 gap-2"
+                      >
+                        {generating || preparing ? (
                           <Loader2 className="animate-spin" size={16} />
                         ) : (
                           <Target size={16} />
                         )}
-                        {generating ? t("goals.generating") : t("goals.continueBtn")}
+                        {generating
+                          ? t("goals.generating")
+                          : preparing
+                            ? t("goals.preparing")
+                            : t("goals.continueBtn")}
                       </Button>
                       {paths.length > 0 && (
                         <Button variant="ghost" onClick={() => setShowForm(false)} className="text-muted-foreground">
@@ -304,6 +373,37 @@ function GoalsInner() {
                         </Button>
                       )}
                     </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            ) : stage === "scoping" && scopeReport ? (
+              <motion.div
+                key="scoping"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+              >
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <button
+                        onClick={() => setStage("form")}
+                        className="text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        <ChevronLeft size={14} />
+                      </button>
+                      {t("scoping.cardTitle", { subject })}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ScopingQuiz
+                      report={scopeReport}
+                      onResolve={handleScopeResolved}
+                      onSkip={() => {
+                        setScopeReport(null);
+                        setStage("calibration");
+                      }}
+                    />
                   </CardContent>
                 </Card>
               </motion.div>
@@ -318,17 +418,36 @@ function GoalsInner() {
                   <CardHeader>
                     <CardTitle className="text-sm flex items-center gap-2">
                       <button
-                        onClick={() => setShowCalibration(false)}
+                        onClick={() => setStage("form")}
                         className="text-muted-foreground hover:text-foreground transition-colors"
                       >
                         <ChevronLeft size={14} />
                       </button>
-                      {t("goals.calibrationTitle", { language })}
+                      {t("goals.calibrationTitle", { subject })}
                     </CardTitle>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="space-y-4">
+                    {classification && (
+                      <TaxonomyBreadcrumb
+                        taxonomy={classification.taxonomy}
+                        breadcrumb={classification.breadcrumb}
+                        uncertain={!classification.matchedOffline && classification.confidence < 0.7}
+                        createdNode={classification.createdNode}
+                        onChange={(next) =>
+                          setClassification({
+                            ...classification,
+                            ...next,
+                            // A correction by hand is certain, and no longer a guess.
+                            confidence: 1,
+                            matchedOffline: true,
+                            createdNode: null,
+                          })
+                        }
+                      />
+                    )}
                     <CalibrationFlow
-                      language={language}
+                      subject={subject}
+                      taxonomyLeaf={classification?.taxonomyLeaf}
                       nativeLanguage={nativeLanguage}
                       onComplete={(level) => handleGenerateWithLevel(level)}
                       onSkip={() => handleGenerateWithLevel("complete_beginner")}
@@ -350,7 +469,7 @@ function GoalsInner() {
           className="mt-8 space-y-3"
         >
           <h2 className="font-display text-xl text-foreground mb-4">
-            {t("goals.pathTitle", { language: newPath.language })}
+            {t("goals.pathTitle", { subject: subjectNameOf(newPath) })}
           </h2>
           {newPath.modules.map((mod, i) => (
             <Card key={i}>

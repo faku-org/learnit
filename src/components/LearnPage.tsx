@@ -56,6 +56,7 @@ import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import "@/lib/i18n";
 import { EXERCISE_TYPE_KEYS } from "@/lib/exerciseTypes";
+import { isLanguagePath, subjectNameOf, taxonomyOf } from "@/lib/domains";
 
 const QUEUE_SIZE = 2;
 const CORRECT_TO_ADVANCE = 3;
@@ -72,7 +73,12 @@ const itemVariants = {
 
 type CurrentPath = {
   _id: string;
-  language: string;
+  subject?: string;
+  /** Present on paths created before the taxonomy work. */
+  language?: string;
+  taxonomy?: string[];
+  taxonomyLeaf?: string;
+  bankKey?: string;
   modules: RoadmapModule[];
 };
 
@@ -261,10 +267,13 @@ function LearnInner() {
 
   const buildParams = useCallback(() => {
     const path = currentPathRef.current;
-    const language = path?.language ?? "japanese";
+    const subject = path ? subjectNameOf(path) : "";
     const prog = progressRef.current;
     const activeKey = activeTopicRef.current;
-    let topic = "greetings";
+    // No path means no subject, and a fabricated fallback would generate
+    // exercises for something the student never asked to study.
+    if (!path || !subject) return null;
+    let topic = "";
     if (path && prog) {
       const resolved = activeKey
         ? (() => {
@@ -276,13 +285,21 @@ function LearnInner() {
       // to practice — wait rather than drifting off-path onto a fallback.
       if (!resolved) return null;
       topic = resolved;
-    } else if (path) {
+    } else {
       const allTopics = path.modules.flatMap((m) => m.topics ?? []);
-      if (allTopics.length > 0) {
-        topic = allTopics[Math.floor(Math.random() * allTopics.length)].name;
-      }
+      if (allTopics.length === 0) return null;
+      topic = allTopics[Math.floor(Math.random() * allTopics.length)].name;
     }
-    return { language, topic, level: "beginner", nativeLanguage: nativeLangRef.current };
+    return {
+      subject,
+      taxonomyLeaf: path.taxonomyLeaf,
+      // Pinned at path creation. Deriving it here would point a pre-existing
+      // path at an empty bank.
+      bankKey: path.bankKey,
+      topic,
+      level: "beginner",
+      nativeLanguage: nativeLangRef.current,
+    };
   }, []);
 
   /**
@@ -597,7 +614,7 @@ function LearnInner() {
       const pairs = exercise.pairs ?? [];
       isCorrect = pairs.length > 0 && pairs.every((p) => matchSelections[p.left] === p.right);
     } else {
-      const lang = currentPath?.language ?? "";
+      const lang = currentPath ? subjectNameOf(currentPath) : "";
       const input = normalizeAnswer(textAnswer, lang);
       const answer = normalizeAnswer(exercise.correctAnswer ?? "", lang);
       isCorrect = input === answer;
@@ -688,13 +705,13 @@ function LearnInner() {
       const saved = await addVocabulary({
         word: wordToSave,
         meaning: wm.meaning,
-        language: currentPath?.language ?? "",
+        language: currentPath ? subjectNameOf(currentPath) : "",
       }) as unknown as { _id: string };
       toast.success(t("learn.toastWordSaved", { word: wordToSave }));
       enrichVocabulary(saved._id, {
         word: wordToSave,
         meaning: wm.meaning,
-        language: currentPath?.language ?? "",
+        language: currentPath ? subjectNameOf(currentPath) : "",
         nativeLanguage,
       }).catch(() => {});
     } catch (e) {
@@ -719,6 +736,10 @@ function LearnInner() {
   );
 
   // ── Main render ───────────────────────────────────────────────────────────
+
+  // Vocabulary saving and speech only mean something for a language path. A
+  // physics path has no infinitives to conjugate and nothing to pronounce.
+  const languageMode = isLanguagePath(currentPath ? taxonomyOf(currentPath) : undefined);
 
   const isChoiceType =
     exercise?.type === "multiple_choice" || exercise?.type === "reading_comprehension";
@@ -768,7 +789,7 @@ function LearnInner() {
           >
             <div className="w-68 py-8 px-4">
               <PathRoadmap
-                language={currentPath.language}
+                language={subjectNameOf(currentPath)}
                 modules={currentPath.modules}
                 progress={progress}
                 activeTopicKey={
@@ -926,7 +947,7 @@ function LearnInner() {
                               {currentTopicName}
                             </span>
                           )}
-                          {exercise.wordMeanings && exercise.wordMeanings.length > 0 && (
+                          {languageMode && exercise.wordMeanings && exercise.wordMeanings.length > 0 && (
                             <div className="relative">
                               <button
                                 onClick={() => setShowWordMenu((v) => !v)}
@@ -974,7 +995,7 @@ function LearnInner() {
                       <p className="text-foreground text-lg">{exercise.instruction}</p>
 
                       {(() => {
-                        const lang = currentPath?.language ?? "japanese";
+                        const lang = currentPath ? subjectNameOf(currentPath) : "";
                         const langCode = toLangCode(lang);
                         const displayText =
                           exercise.type === "reading_comprehension"
@@ -1008,7 +1029,7 @@ function LearnInner() {
                                     />
                                   </p>
                                   <div className="flex shrink-0 gap-0.5 mt-1">
-                                    {speakableText && (
+                                    {languageMode && speakableText && (
                                       <button
                                         onClick={() => speakText(speakableText, langCode)}
                                         className="text-muted-foreground hover:text-foreground transition-colors rounded-lg p-1.5 hover:bg-secondary"

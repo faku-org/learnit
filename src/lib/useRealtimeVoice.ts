@@ -24,7 +24,9 @@ function floatToPCM16Base64(float32: Float32Array): string {
   return btoa(binary);
 }
 
-function base64PCM16ToFloat32(base64: string): Float32Array {
+// The explicit ArrayBuffer parameter matters: copyToChannel rejects the widened
+// Float32Array<ArrayBufferLike> that inference would otherwise produce here.
+function base64PCM16ToFloat32(base64: string): Float32Array<ArrayBuffer> {
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);

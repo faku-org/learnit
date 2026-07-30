@@ -59,7 +59,8 @@ export type CalibrationQuestion = {
 
 /** One stage of the adaptive placement test. The caller picks the next probeLevel. */
 export const generateCalibrationStage = (data: {
-  language: string;
+  subject: string;
+  taxonomyLeaf?: string;
   nativeLanguage?: string;
   probeLevel: CalibrationProbeLevel;
   stage: number;
@@ -71,12 +72,60 @@ export const generateCalibrationStage = (data: {
     { method: "POST", body: JSON.stringify(data) },
   );
 
+// ── Taxonomy ──────────────────────────────────────────────────────────────────
+
+export type Classification = {
+  taxonomy: string[];
+  taxonomyLeaf: string;
+  breadcrumb: string;
+  confidence: number;
+  matchedOffline: boolean;
+  createdNode: string | null;
+};
+
+/** Place a subject in the tree. The breadcrumb is shown for the user to correct. */
+export const classifySubject = (data: { subject: string; objective?: string }) =>
+  request<Classification>("/api/taxonomy/classify", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+
+export type ScopeReport = {
+  breadth: "too_broad" | "workable" | "narrow";
+  reason: string;
+  questions: { id: string; question: string; options: string[]; allowsFreeText: boolean }[];
+  suggestedObjective: string | null;
+};
+
+/** Judge whether a goal is narrow enough to plan. Never blocks: failure reads as workable. */
+export const checkScope = (data: { subject: string; objective: string }) =>
+  request<ScopeReport>("/api/taxonomy/scope", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+
+export type TaxonomyNodeDTO = {
+  id: string;
+  parentId: string | null;
+  name: string;
+  depth: number;
+  pathCount: number;
+};
+
+export const getTaxonomyTree = () => request<TaxonomyNodeDTO[]>("/api/taxonomy/tree");
+
 // ── Path ──────────────────────────────────────────────────────────────────────
 
-export type PathTopic = { name: string; order: number; description?: string };
+export type PathTopic = {
+  name: string;
+  order: number;
+  description?: string;
+  concepts?: string[];
+};
 
 export const generatePath = (data: {
-  language: string;
+  subject: string;
+  taxonomyLeaf?: string;
   objective: string;
   timeframe: string;
   modules?: number;
@@ -115,7 +164,8 @@ export const updatePreferences = (data: {
 // ── Exercises ─────────────────────────────────────────────────────────────────
 
 export const generateExercise = (data: {
-  language: string;
+  subject: string;
+  taxonomyLeaf?: string;
   level: string;
   topic: string;
   type: string;
@@ -127,17 +177,24 @@ export const generateExercise = (data: {
   });
 
 export const getNextExercise = (params: {
-  language: string;
+  subject: string;
+  taxonomyLeaf?: string;
+  /** The path's pinned exercise-bank partition. Never derive this. */
+  bankKey?: string;
   topic: string;
   level?: string;
   nativeLanguage?: string;
 }) => {
   const qs = new URLSearchParams({
-    language: params.language,
+    subject: params.subject,
     topic: params.topic,
     level: params.level ?? "beginner",
     nativeLanguage: params.nativeLanguage ?? "english",
   });
+  // Sending the leaf lets the server skip classification entirely, which is the
+  // difference between a cached lookup and an LLM call on every exercise.
+  if (params.taxonomyLeaf) qs.set("taxonomyLeaf", params.taxonomyLeaf);
+  if (params.bankKey) qs.set("bankKey", params.bankKey);
   return request<Record<string, unknown>>(`/api/exercises/next?${qs}`);
 };
 
@@ -157,6 +214,15 @@ export const recordAnswer = (data: {
   exerciseType?: string;
   durationMs?: number;
   gaveUp?: boolean;
+  /** MindVault `certeza`, 1-4. Omitted when the student was not asked. */
+  confidence?: number | null;
+  conceptIds?: string[];
+  gradingMode?: string;
+  score?: number;
+  examId?: string | null;
+  sessionPosition?: number;
+  afterGiveUp?: boolean;
+  inExam?: boolean;
 }) =>
   request<{
     points?: number;

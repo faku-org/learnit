@@ -176,13 +176,22 @@ const PROBE_LEVEL_KEYS: Record<CalibrationProbeLevel, string> = {
 type Step = "projection" | "quiz" | "adapting" | "result";
 
 type Props = {
-  language: string;
+  /** What is being studied: a language, or any other subject. */
+  subject: string;
+  /** Taxonomy placement, so the server skips re-classifying on every stage. */
+  taxonomyLeaf?: string;
   nativeLanguage?: string;
   onComplete: (level: CalibrationLevel, projection: ProjectionAnswers) => void;
   onSkip: () => void;
 };
 
-export function CalibrationFlow({ language, nativeLanguage = "english", onComplete, onSkip }: Props) {
+export function CalibrationFlow({
+  subject,
+  taxonomyLeaf,
+  nativeLanguage = "english",
+  onComplete,
+  onSkip,
+}: Props) {
   const { t } = useTranslation();
   const [step, setStep] = useState<Step>("projection");
   const [projection, setProjection] = useState<Partial<ProjectionAnswers>>({});
@@ -210,7 +219,8 @@ export function CalibrationFlow({ language, nativeLanguage = "english", onComple
     setLoading(true);
     try {
       const data = await generateCalibrationStage({
-        language,
+        subject,
+        taxonomyLeaf,
         nativeLanguage,
         probeLevel: nextLevel,
         stage: nextStage,
@@ -330,7 +340,7 @@ export function CalibrationFlow({ language, nativeLanguage = "english", onComple
           >
             <motion.div variants={itemVariants}>
               <p className="text-sm text-muted-foreground mb-1">
-                {t("calibration.personalize", { language })}
+                {t("calibration.personalize", { subject })}
               </p>
             </motion.div>
 
@@ -347,13 +357,13 @@ export function CalibrationFlow({ language, nativeLanguage = "english", onComple
               onChange={(v) => setProjection((p) => ({ ...p, dailyTime: v }))}
             />
             <ProjectionSection
-              title={t("calibration.priorExposureQuestion", { language })}
+              title={t("calibration.priorExposureQuestion", { subject })}
               options={PRIOR_EXPOSURES}
               value={projection.priorExposure}
               onChange={(v) => setProjection((p) => ({ ...p, priorExposure: v }))}
             />
             <ProjectionSection
-              title={t("calibration.selfRatingQuestion", { language })}
+              title={t("calibration.selfRatingQuestion", { subject })}
               options={SELF_RATINGS}
               value={projection.selfRating}
               onChange={(v) => setProjection((p) => ({ ...p, selfRating: v }))}
