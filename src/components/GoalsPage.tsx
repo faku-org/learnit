@@ -476,6 +476,7 @@ function GoalsInner() {
                     )}
                     <CalibrationFlow
                       subject={subject}
+                      taxonomy={classification?.taxonomy}
                       taxonomyLeaf={classification?.taxonomyLeaf}
                       nativeLanguage={nativeLanguage}
                       onComplete={(level) => handleGenerateWithLevel(level)}

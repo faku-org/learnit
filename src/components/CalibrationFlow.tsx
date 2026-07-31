@@ -12,6 +12,7 @@ import {
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import "@/lib/i18n";
+import { isLanguagePath } from "@/lib/domains";
 
 const containerVariants = {
   hidden: {},
@@ -29,36 +30,83 @@ type ProjectionAnswers = {
   selfRating: string;
 };
 
-const MOTIVATIONS = [
+// The projective questions ask the same four things whatever the subject, but
+// the ANSWERS cannot: "travel and tourism", "a few words and phrases", and
+// "fluent" are reasons and levels that only exist for a language. A student
+// starting Macroeconomics was being offered a menu written for someone learning
+// German, so each option set has a language form and a general one.
+//
+// The language forms are byte-identical to what shipped before, because a
+// language path must not regress.
+
+type Option = { value: string; labelKey: string };
+
+const MOTIVATIONS_LANGUAGE: Option[] = [
   { value: "travel", labelKey: "calibration.motivationTravel" },
   { value: "work", labelKey: "calibration.motivationWork" },
   { value: "culture", labelKey: "calibration.motivationCulture" },
   { value: "personal", labelKey: "calibration.motivationPersonal" },
 ];
 
-const DAILY_TIMES = [
+// Distinct VALUES, not just distinct labels: motivation is the cold-start prior
+// that feeds the learner profile, and "travel" would be a meaningless answer to
+// record for someone studying thermodynamics.
+const MOTIVATIONS_GENERAL: Option[] = [
+  { value: "exam", labelKey: "calibration.motivationExam" },
+  { value: "career", labelKey: "calibration.motivationCareer" },
+  { value: "course", labelKey: "calibration.motivationCourse" },
+  { value: "curiosity", labelKey: "calibration.motivationCuriosity" },
+];
+
+const DAILY_TIMES: Option[] = [
   { value: "5-10", labelKey: "calibration.dailyTime5_10" },
   { value: "15-30", labelKey: "calibration.dailyTime15_30" },
   { value: "30-60", labelKey: "calibration.dailyTime30_60" },
   { value: "60+", labelKey: "calibration.dailyTime60Plus" },
 ];
 
-const PRIOR_EXPOSURES = [
+const PRIOR_EXPOSURES_LANGUAGE: Option[] = [
   { value: "none", labelKey: "calibration.priorNone" },
   { value: "little", labelKey: "calibration.priorLittle" },
   { value: "some", labelKey: "calibration.priorSome" },
   { value: "more", labelKey: "calibration.priorMore" },
 ];
 
+// Same values, different wording. These four feed `priorExposureToProbeLevel`,
+// so the ladder must keep reading exactly the same answers.
+const PRIOR_EXPOSURES_GENERAL: Option[] = [
+  { value: "none", labelKey: "calibration.priorNoneGeneral" },
+  { value: "little", labelKey: "calibration.priorLittleGeneral" },
+  { value: "some", labelKey: "calibration.priorSomeGeneral" },
+  { value: "more", labelKey: "calibration.priorMoreGeneral" },
+];
+
 // Self-qualification, in the student's own words. Indices line up 1:1 with
 // CalibrationLevel (see CALIBRATION_LEVEL_INDEX) so the result can be compared
 // directly against what the placement test measures.
-const SELF_RATINGS = [
+const SELF_RATINGS_LANGUAGE: Option[] = [
   { value: "poor", labelKey: "calibration.selfRatingPoor" },
   { value: "okay", labelKey: "calibration.selfRatingOkay" },
   { value: "good", labelKey: "calibration.selfRatingGood" },
   { value: "great", labelKey: "calibration.selfRatingGreat" },
 ];
+
+// Only the top rung is language-specific: nobody is "fluent" in probability.
+const SELF_RATINGS_GENERAL: Option[] = [
+  ...SELF_RATINGS_LANGUAGE.slice(0, 3),
+  { value: "great", labelKey: "calibration.selfRatingGreatGeneral" },
+];
+
+/** Both option sets for a mode, so the copy is chosen in exactly one place. */
+function optionsFor(languageMode: boolean) {
+  return {
+    motivations: languageMode ? MOTIVATIONS_LANGUAGE : MOTIVATIONS_GENERAL,
+    priorExposures: languageMode ? PRIOR_EXPOSURES_LANGUAGE : PRIOR_EXPOSURES_GENERAL,
+    selfRatings: languageMode ? SELF_RATINGS_LANGUAGE : SELF_RATINGS_GENERAL,
+    /** Level blurbs talk about alphabets and grammar for a language path. */
+    levelDescription: languageMode ? "description" : "descriptionGeneral",
+  };
+}
 
 // ── Adaptive ladder ───────────────────────────────────────────────────────────
 
@@ -178,6 +226,8 @@ type Step = "projection" | "quiz" | "adapting" | "result";
 type Props = {
   /** What is being studied: a language, or any other subject. */
   subject: string;
+  /** Root-to-leaf placement. Decides which set of answer options is offered. */
+  taxonomy?: string[];
   /** Taxonomy placement, so the server skips re-classifying on every stage. */
   taxonomyLeaf?: string;
   nativeLanguage?: string;
@@ -187,12 +237,16 @@ type Props = {
 
 export function CalibrationFlow({
   subject,
+  taxonomy,
   taxonomyLeaf,
   nativeLanguage = "english",
   onComplete,
   onSkip,
 }: Props) {
   const { t } = useTranslation();
+  // Unclassified defaults to the general copy: it reads correctly for a
+  // language too, whereas the language copy is nonsense for anything else.
+  const options = optionsFor(isLanguagePath(taxonomy));
   const [step, setStep] = useState<Step>("projection");
   const [projection, setProjection] = useState<Partial<ProjectionAnswers>>({});
   const [loading, setLoading] = useState(false);
@@ -322,7 +376,7 @@ export function CalibrationFlow({
     level && projection.selfRating
       ? compareSelfAssessment(projection.selfRating, level)
       : null;
-  const selfRatingKey = SELF_RATINGS.find((r) => r.value === projection.selfRating)?.labelKey;
+  const selfRatingKey = options.selfRatings.find((r) => r.value === projection.selfRating)?.labelKey;
   const selfRatingLabel = selfRatingKey ? t(selfRatingKey) : undefined;
 
   return (
@@ -346,7 +400,7 @@ export function CalibrationFlow({
 
             <ProjectionSection
               title={t("calibration.whyLearning")}
-              options={MOTIVATIONS}
+              options={options.motivations}
               value={projection.motivation}
               onChange={(v) => setProjection((p) => ({ ...p, motivation: v }))}
             />
@@ -358,13 +412,13 @@ export function CalibrationFlow({
             />
             <ProjectionSection
               title={t("calibration.priorExposureQuestion", { subject })}
-              options={PRIOR_EXPOSURES}
+              options={options.priorExposures}
               value={projection.priorExposure}
               onChange={(v) => setProjection((p) => ({ ...p, priorExposure: v }))}
             />
             <ProjectionSection
               title={t("calibration.selfRatingQuestion", { subject })}
-              options={SELF_RATINGS}
+              options={options.selfRatings}
               value={projection.selfRating}
               onChange={(v) => setProjection((p) => ({ ...p, selfRating: v }))}
             />
@@ -593,7 +647,7 @@ export function CalibrationFlow({
                     {t(`calibration.levels.${LEVEL_KEYS[level]}.label`)}
                   </p>
                   <p className="text-sm text-muted-foreground">
-                    {t(`calibration.levels.${LEVEL_KEYS[level]}.description`)}
+                    {t(`calibration.levels.${LEVEL_KEYS[level]}.${options.levelDescription}`)}
                   </p>
 
                   <div className="pt-2 space-y-1">

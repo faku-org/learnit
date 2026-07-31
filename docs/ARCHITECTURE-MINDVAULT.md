@@ -1035,7 +1035,7 @@ Dependencies: 1 gates everything. 2 gates 4. 5 wants 4 for its richest signal bu
 1. **Cluster count and recompute cadence** for calibration cohorts (§5.3). Needs real data; start with a small k and a weekly batch.
 2. **IRT model.** Two-parameter logistic is the obvious start. Three-parameter adds guessing, which matters for multiple choice, but needs far more responses to fit stably.
 3. **Transfer distance thresholds** (§3.4). How far up the tree transfer stays useful is an empirical question. Start conservative.
-4. **Source licensing for redistribution.** Caching retrieved text in a shared collection is fine for public-domain providers, less clear for others. Needs a per-provider policy before Phase 3 ships.
+4. ~~**Source licensing for redistribution.**~~ Resolved when Phase 3 shipped. Each provider declares `cacheText`. Public-domain and open-licensed corpora — Perseus, Wikisource, Gutenberg, arXiv abstracts — are cached in the shared `sources` collection and rendered in full, with `license` stored per source and shown on the provenance line. Bibliographic services return publisher-owned abstracts, so **Crossref and OpenAlex store metadata only** and their blocks render as a citation with a resolvable link rather than an excerpt. The search fallback never returns a passage at all.
 5. **Whether taxonomy should be global or per-user.** Currently global, which lets popularity drive cohorts, but it means one user's odd subject creates a node everyone sees. Probably fine; worth revisiting if the tree gets noisy.
 
 ---

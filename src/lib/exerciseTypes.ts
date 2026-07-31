@@ -1,4 +1,5 @@
 export const EXERCISE_TYPE_KEYS: Record<string, string> = {
+  // language
   multiple_choice: "exercises.typeMultipleChoice",
   fill_blank: "exercises.typeFillBlank",
   translation: "exercises.typeTranslation",
@@ -6,4 +7,24 @@ export const EXERCISE_TYPE_KEYS: Record<string, string> = {
   matching: "exercises.typeMatching",
   reading_comprehension: "exercises.typeReadingComprehension",
   word_order: "exercises.typeWordOrder",
+  // shared
+  cloze: "exercises.typeCloze",
+  short_answer: "exercises.typeShortAnswer",
+  ordering: "exercises.typeOrdering",
+  flashcard: "exercises.typeFlashcard",
+  // quantitative
+  numeric: "exercises.typeNumeric",
+  symbolic: "exercises.typeSymbolic",
+  derivation_order: "exercises.typeDerivationOrder",
+  plot_reading: "exercises.typePlotReading",
+  unit_conversion: "exercises.typeUnitConversion",
+  // humanities
+  source_analysis: "exercises.typeSourceAnalysis",
+  chronology: "exercises.typeChronology",
+  argument_reconstruction: "exercises.typeArgumentReconstruction",
+  compare_contrast: "exercises.typeCompareContrast",
+  // computing
+  code_output: "exercises.typeCodeOutput",
+  code_fix: "exercises.typeCodeFix",
+  complexity: "exercises.typeComplexity",
 };

@@ -1,10 +1,18 @@
 {
   "extends": "astro/tsconfigs/strict",
   "compilerOptions": {
+    // `bun:test` is only reachable with these loaded. Listed alongside the
+    // defaults rather than replacing them, so React and Astro types survive.
+    "types": ["bun-types", "react", "react-dom", "node"],
     // No baseUrl: it was removed in TypeScript 7. Path mappings now resolve
     // relative to this file, which is what "./src/*" already assumed.
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      // Pure, dependency-free modules the client and the server must agree on
+      // exactly: the expression parser and the deterministic grading ladder.
+      // They live under the API because it is the authority on a grade, and the
+      // client bundles the same file rather than a re-implementation of it.
+      "@shared/*": ["./api/src/*"]
     }
   },
   "include": [".astro/types.d.ts", "**/*"],

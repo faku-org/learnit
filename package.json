@@ -11,6 +11,7 @@
     "preview": "astro preview",
     "astro": "astro",
     "api": "cd api && bun run --preload ./src/preload.ts src/index.ts",
+    "test": "bun test",
     "typecheck": "bunx tsc --noEmit",
     "lint": "bunx oxlint src",
     "format": "bunx oxfmt src"
@@ -26,6 +27,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "i18next": "^26.3.4",
+    "katex": "^0.18.1",
     "lucide-react": "^1.21.0",
     "motion": "^12.41.0",
     "postcss": "^8.5.15",
@@ -39,6 +41,7 @@
   "devDependencies": {
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
+    "bun-types": "^1.3.14",
     "oxfmt": "^0.56.0",
     "oxlint": "^1.71.0"
   }

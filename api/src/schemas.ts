@@ -185,6 +185,14 @@ export const AttemptSchema = z.object({
   gradingMode: z.string().default("exact"),
   /** Partial credit, 0-1. Binary outcomes record 1 or 0. */
   score: z.number().min(0).max(1).default(0),
+  /**
+   * Set when the semantic rung overturned a deterministic mismatch. Recorded so
+   * the override rate is measurable: a grader that has drifted lenient shows up
+   * as a rising rate rather than as quietly inflated mastery.
+   */
+  semanticOverride: z.boolean().default(false),
+  /** Which rung of the grading ladder settled this attempt. */
+  gradedVia: z.string().default("exact"),
   examId: z.string().nullable().default(null),
 
   /** MindVault "contexto": the situation this memory was formed in. */

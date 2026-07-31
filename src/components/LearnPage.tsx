@@ -26,8 +26,17 @@ function ExerciseIcon({ name, ...props }: { name: string } & LucideProps) {
 }
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import type { ContentBlock } from "@shared/blocks";
+import {
+  answerToText,
+  gradeDeterministic,
+  gradingSpecOf,
+  type GradeResult,
+  type StudentAnswer,
+} from "@shared/grading";
 import {
   getNextExercise,
+  gradeSemantic,
   recordAnswer,
   explainExercise,
   getCurrentPath,
@@ -57,6 +66,9 @@ import { useTranslation } from "react-i18next";
 import "@/lib/i18n";
 import { EXERCISE_TYPE_KEYS } from "@/lib/exerciseTypes";
 import { isLanguagePath, subjectNameOf, taxonomyOf } from "@/lib/domains";
+import { ContentBlocks } from "@/components/blocks/ContentBlocks";
+import { Latex } from "@/components/blocks/Latex";
+import { AnswerArea, initialAnswerFor, isAnswerComplete } from "@/components/answers/AnswerArea";
 
 const QUEUE_SIZE = 2;
 const CORRECT_TO_ADVANCE = 3;
@@ -99,19 +111,12 @@ type Exercise = {
   hint?: string;
   explanation?: string;
   wordMeanings?: WordMeaning[];
+  /** Structured body. Absent on everything generated before Phase 2. */
+  blocks?: ContentBlock[];
+  /** Declared grading spec. Absent documents are read through the legacy fields. */
+  grading?: unknown;
+  concepts?: string[];
 };
-
-function normalizeAnswer(text: string, language: string): string {
-  let s = text
-    .toLowerCase()
-    .replace(/[.,!?;:'"()«»„""\-]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-  if (language.toLowerCase() !== "german") return s;
-  return s
-    .replace(/ä/g, "a").replace(/ö/g, "o").replace(/ü/g, "u").replace(/ß/g, "ss")
-    .replace(/ae/g, "a").replace(/oe/g, "o").replace(/ue/g, "u");
-}
 
 type ExplanationResponse = {
   correctAnswer: string;
@@ -152,11 +157,13 @@ function LearnInner() {
   const { t } = useTranslation();
   const [exercise, setExercise] = useState<Exercise | null>(null);
   const [prevExercise, setPrevExercise] = useState<Exercise | null>(null);
-  const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
-  const [textAnswer, setTextAnswer] = useState("");
-  const [selectedWordIndices, setSelectedWordIndices] = useState<number[]>([]);
-  const [matchSelections, setMatchSelections] = useState<Record<string, string>>({});
-  const [selectedLeft, setSelectedLeft] = useState<string | null>(null);
+  // One value for every grading mode. The answer components own their own
+  // interaction state; this is only what the grader will be handed.
+  const [answer, setAnswer] = useState<StudentAnswer>({ kind: "text", value: "" });
+  const [gradeNote, setGradeNote] = useState<string | null>(null);
+  const [lastGrade, setLastGrade] = useState<GradeResult | null>(null);
+  /** The semantic rung is in flight. Only ever true after a deterministic miss. */
+  const [verifying, setVerifying] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [correct, setCorrect] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -218,52 +225,23 @@ function LearnInner() {
     return (currentPath.modules[progress.currentModuleIndex]?.topics?.length ?? 0) === 0;
   }, [currentPath, progress]);
 
-  const wordTiles = useMemo(() => {
-    if (!exercise?.words) return [];
-    const tiles = exercise.words.map((word, idx) => ({ word, idx }));
-    for (let i = tiles.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [tiles[i], tiles[j]] = [tiles[j], tiles[i]];
-    }
-    return tiles;
-  }, [exercise]);
+  /**
+   * How this exercise is graded. A document generated after Phase 2 declares it;
+   * everything already in the shared bank is read off `correctIndex`,
+   * `correctAnswer`, `pairs`, or `words` instead. Either way there is one
+   * grading path, and the same module runs on the server.
+   */
+  const gradingSpec = useMemo(
+    () => (exercise ? gradingSpecOf(exercise) : null),
+    [exercise],
+  );
 
-  const shuffledRightOptions = useMemo(() => {
-    if (!exercise?.pairs) return [];
-    const rights = exercise.pairs.map((p) => p.right);
-    for (let i = rights.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [rights[i], rights[j]] = [rights[j], rights[i]];
-    }
-    return rights;
-  }, [exercise]);
-
-  const handleLeftClick = (left: string) => {
-    if (submitted) return;
-    if (matchSelections[left]) {
-      setMatchSelections((prev) => {
-        const next = { ...prev };
-        delete next[left];
-        return next;
-      });
-      setSelectedLeft(null);
-      return;
-    }
-    setSelectedLeft((prev) => (prev === left ? null : left));
-  };
-
-  const handleRightClick = (right: string) => {
-    if (submitted || !selectedLeft) return;
-    setMatchSelections((prev) => {
-      const next = { ...prev };
-      for (const k of Object.keys(next)) {
-        if (next[k] === right) delete next[k];
-      }
-      next[selectedLeft] = right;
-      return next;
-    });
-    setSelectedLeft(null);
-  };
+  // The empty answer is shaped by the grading mode, so switching from a
+  // multiple-choice exercise to a symbolic one swaps the field rather than
+  // carrying a stale selection into it.
+  useEffect(() => {
+    if (gradingSpec) setAnswer(initialAnswerFor(gradingSpec));
+  }, [gradingSpec]);
 
   const buildParams = useCallback(() => {
     const path = currentPathRef.current;
@@ -432,11 +410,10 @@ function LearnInner() {
 
   const resetInteractionState = () => {
     setSubmitted(false);
-    setSelectedAnswer(null);
-    setTextAnswer("");
-    setSelectedWordIndices([]);
-    setMatchSelections({});
-    setSelectedLeft(null);
+    setAnswer({ kind: "text", value: "" });
+    setGradeNote(null);
+    setLastGrade(null);
+    setVerifying(false);
     setGaveUp(false);
     setExplaining(false);
     setDetailedExpl(null);
@@ -580,7 +557,14 @@ function LearnInner() {
 
   /** Records the attempt and returns the session totals the server now holds. */
   const record = useCallback(
-    async (exerciseId: string, isCorrect: boolean, gaveUp: boolean, type: string) => {
+    async (
+      exerciseId: string,
+      isCorrect: boolean,
+      gaveUp: boolean,
+      type: string,
+      grade?: { mode: string; score: number; via: string; semanticOverride: boolean },
+      conceptIds: string[] = [],
+    ) => {
       const ref = resolveTopicRef();
       const result = await recordAnswer({
         exerciseId,
@@ -594,6 +578,11 @@ function LearnInner() {
         topicIndex: ref?.topicIndex,
         topicName: ref?.topicName,
         moduleName: ref?.moduleName,
+        conceptIds,
+        gradingMode: grade?.mode,
+        score: grade?.score,
+        gradedVia: grade?.via,
+        semanticOverride: grade?.semanticOverride,
       }).catch(() => null);
       if (result?.points) toast.success(t("learn.toastPointsEarned", { points: result.points }));
       return { ref, result };
@@ -601,30 +590,45 @@ function LearnInner() {
     [resolveTopicRef],
   );
 
+  /**
+   * The grading ladder. Rungs 1 to 3 run locally and settle almost everything
+   * instantly; rung 4 is one small model call that fires only when they could
+   * not, and only ever to overturn a miss into a hit.
+   */
   const handleSubmit = async () => {
-    if (!exercise) return;
-    let isCorrect = false;
-    if (exercise.type === "multiple_choice" || exercise.type === "reading_comprehension") {
-      isCorrect = selectedAnswer === (exercise.correctIndex ?? 0);
-    } else if (exercise.type === "word_order") {
-      isCorrect =
-        selectedWordIndices.length === (exercise.words?.length ?? 0) &&
-        selectedWordIndices.every((idx, i) => idx === i);
-    } else if (exercise.type === "matching") {
-      const pairs = exercise.pairs ?? [];
-      isCorrect = pairs.length > 0 && pairs.every((p) => matchSelections[p.left] === p.right);
-    } else {
-      const lang = currentPath ? subjectNameOf(currentPath) : "";
-      const input = normalizeAnswer(textAnswer, lang);
-      const answer = normalizeAnswer(exercise.correctAnswer ?? "", lang);
-      isCorrect = input === answer;
-      if (!isCorrect && exercise.type === "fill_blank" && exercise.sentence) {
-        const full = exercise.sentence.replace(/___/g, exercise.correctAnswer ?? "");
-        isCorrect = input === normalizeAnswer(full, lang);
-      }
-    }
-    setCorrect(isCorrect);
+    if (!exercise || !gradingSpec) return;
+
+    let grade: GradeResult = gradeDeterministic(gradingSpec, answer);
+    let semanticOverride = false;
+
+    setCorrect(grade.correct);
+    setLastGrade(grade);
     setSubmitted(true);
+
+    if (!grade.correct && grade.needsSemantic) {
+      setVerifying(true);
+      const verdict = await gradeSemantic({
+        question: [exercise.instruction, exercise.question, exercise.sentence]
+          .filter(Boolean)
+          .join(" "),
+        expected: grade.expected,
+        actual: answerToText(answer, exercise.options),
+        taxonomy: currentPath ? taxonomyOf(currentPath) : [],
+        gradingMode: grade.mode,
+        nativeLanguage,
+      }).catch(() => null);
+      setVerifying(false);
+
+      if (verdict?.correct) {
+        grade = { ...grade, correct: true, score: 1, via: "semantic" };
+        semanticOverride = true;
+        setCorrect(true);
+        setLastGrade(grade);
+      }
+      if (verdict?.note) setGradeNote(verdict.note);
+    }
+
+    const isCorrect = grade.correct;
 
     // Feedback trigger
     const next = answeredCount + 1;
@@ -638,7 +642,14 @@ function LearnInner() {
 
     // The attempt must land before the session can be closed below.
     const recorded = exercise._id
-      ? await record(exercise._id, isCorrect, false, exercise.type)
+      ? await record(
+          exercise._id,
+          isCorrect,
+          false,
+          exercise.type,
+          { mode: grade.mode, score: grade.score, via: grade.via, semanticOverride },
+          exercise.concepts ?? [],
+        )
       : null;
 
     if (!isCorrect) return;
@@ -741,20 +752,9 @@ function LearnInner() {
   // physics path has no infinitives to conjugate and nothing to pronounce.
   const languageMode = isLanguagePath(currentPath ? taxonomyOf(currentPath) : undefined);
 
-  const isChoiceType =
-    exercise?.type === "multiple_choice" || exercise?.type === "reading_comprehension";
-
-  const canSubmit =
-    exercise &&
-    !submitted &&
-    (isChoiceType
-      ? selectedAnswer !== null
-      : exercise.type === "word_order"
-        ? selectedWordIndices.length > 0 && selectedWordIndices.length === (exercise.words?.length ?? 0)
-        : exercise.type === "matching"
-          ? (exercise.pairs?.length ?? 0) > 0 &&
-            Object.keys(matchSelections).length === (exercise.pairs?.length ?? 0)
-          : textAnswer.trim().length > 0);
+  const canSubmit = Boolean(
+    exercise && gradingSpec && !submitted && isAnswerComplete(gradingSpec, answer),
+  );
 
   const hasPath = Boolean(currentPath);
 
@@ -994,7 +994,12 @@ function LearnInner() {
                       )}
                       <p className="text-foreground text-lg">{exercise.instruction}</p>
 
-                      {(() => {
+                      {/* A Phase 2 document renders its blocks; anything older
+                          renders through the question/sentence/sourceText path
+                          it always used, which is why there is no backfill. */}
+                      <ContentBlocks
+                        blocks={exercise.blocks}
+                        fallback={(() => {
                         const lang = currentPath ? subjectNameOf(currentPath) : "";
                         const langCode = toLangCode(lang);
                         const displayText =
@@ -1056,157 +1061,26 @@ function LearnInner() {
                           </>
                         );
                       })()}
+                      />
 
                       {exercise.type === "reading_comprehension" && exercise.question && (
                         <p className="text-foreground font-medium">{exercise.question}</p>
                       )}
 
-                      {!gaveUp && isChoiceType && exercise.options && (
-                        <div className="space-y-2">
-                          {exercise.options.map((opt, i) => (
-                            <button
-                              key={i}
-                              onClick={() => !submitted && setSelectedAnswer(i)}
-                              disabled={submitted}
-                              className={[
-                                "w-full text-left p-3 rounded-lg border transition-colors text-sm",
-                                submitted && i === exercise.correctIndex
-                                  ? "border-accent bg-accent/10 text-accent"
-                                  : submitted && i === selectedAnswer && i !== exercise.correctIndex
-                                    ? "border-red-500/30 bg-red-500/5 text-red-400"
-                                    : selectedAnswer === i
-                                      ? "border-primary bg-primary/10"
-                                      : "border-border hover:border-primary/30",
-                              ].join(" ")}
-                            >
-                              {opt}
-                            </button>
-                          ))}
-                        </div>
+                      {!gaveUp && gradingSpec && (
+                        <AnswerArea
+                          key={exercise._id ?? exercise.instruction}
+                          spec={gradingSpec}
+                          value={answer}
+                          onChange={setAnswer}
+                          onSubmit={handleSubmit}
+                          submitted={submitted}
+                          correct={correct}
+                          options={exercise.options}
+                          taxonomy={currentPath ? taxonomyOf(currentPath) : []}
+                        />
                       )}
 
-                      {!gaveUp && exercise.type === "word_order" && exercise.words && (
-                        <div className="space-y-3">
-                          <div className="min-h-14 flex flex-wrap items-center gap-2 p-3 rounded-lg border border-dashed border-border bg-secondary/30">
-                            {selectedWordIndices.length === 0 && (
-                              <span className="text-xs text-muted-foreground">
-                                {t("learn.tapWordsToBuild")}
-                              </span>
-                            )}
-                            {selectedWordIndices.map((idx, pos) => (
-                              <button
-                                key={pos}
-                                onClick={() =>
-                                  !submitted &&
-                                  setSelectedWordIndices((prev) => prev.filter((_, i) => i !== pos))
-                                }
-                                disabled={submitted}
-                                className={[
-                                  "px-3 py-1.5 rounded-lg border text-sm transition-colors",
-                                  submitted
-                                    ? correct
-                                      ? "border-accent bg-accent/10 text-accent"
-                                      : "border-red-500/30 bg-red-500/5 text-red-400"
-                                    : "border-primary bg-primary/10 text-foreground hover:bg-primary/20",
-                                ].join(" ")}
-                              >
-                                {wordTiles.find((t) => t.idx === idx)?.word}
-                              </button>
-                            ))}
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            {wordTiles
-                              .filter((t) => !selectedWordIndices.includes(t.idx))
-                              .map((t) => (
-                                <button
-                                  key={t.idx}
-                                  onClick={() =>
-                                    !submitted &&
-                                    setSelectedWordIndices((prev) => [...prev, t.idx])
-                                  }
-                                  disabled={submitted}
-                                  className="px-3 py-1.5 rounded-lg border border-border text-sm hover:border-primary/30 disabled:opacity-40 transition-colors"
-                                >
-                                  {t.word}
-                                </button>
-                              ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {!gaveUp && exercise.type === "matching" && exercise.pairs && (
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="space-y-2">
-                            {exercise.pairs.map((p) => {
-                              const isSelected = selectedLeft === p.left;
-                              const matchedRight = matchSelections[p.left];
-                              const isCorrectPair = submitted && matchedRight === p.right;
-                              return (
-                                <button
-                                  key={p.left}
-                                  onClick={() => handleLeftClick(p.left)}
-                                  disabled={submitted}
-                                  className={[
-                                    "w-full text-left p-2.5 rounded-lg border text-sm transition-colors",
-                                    submitted
-                                      ? isCorrectPair
-                                        ? "border-accent bg-accent/10 text-accent"
-                                        : "border-red-500/30 bg-red-500/5 text-red-400"
-                                      : isSelected
-                                        ? "border-primary bg-primary/10"
-                                        : matchedRight
-                                          ? "border-accent/40 bg-accent/5"
-                                          : "border-border hover:border-primary/30",
-                                  ].join(" ")}
-                                >
-                                  {p.left}
-                                  {matchedRight && (
-                                    <span className="text-muted-foreground"> &rarr; {matchedRight}</span>
-                                  )}
-                                </button>
-                              );
-                            })}
-                          </div>
-                          <div className="space-y-2">
-                            {shuffledRightOptions.map((r) => {
-                              const usedBy = Object.entries(matchSelections).find(
-                                ([, v]) => v === r,
-                              )?.[0];
-                              return (
-                                <button
-                                  key={r}
-                                  onClick={() => handleRightClick(r)}
-                                  disabled={submitted || !selectedLeft}
-                                  className={[
-                                    "w-full text-left p-2.5 rounded-lg border text-sm transition-colors",
-                                    usedBy
-                                      ? "border-accent/40 bg-accent/5 text-muted-foreground"
-                                      : "border-border hover:border-primary/30",
-                                    submitted || (!selectedLeft && !usedBy) ? "opacity-50" : "",
-                                  ].join(" ")}
-                                >
-                                  {r}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-
-                      {!gaveUp &&
-                        (exercise.type === "fill_blank" ||
-                          exercise.type === "translation" ||
-                          exercise.type === "conjugation") && (
-                          <input
-                            type="text"
-                            value={textAnswer}
-                            onChange={(e) => setTextAnswer(e.target.value)}
-                            disabled={submitted}
-                            placeholder={t("learn.typeAnswerPlaceholder")}
-                            className="w-full p-3 rounded-lg border border-border bg-card text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary disabled:opacity-50 text-sm"
-                            onKeyDown={(e) => e.key === "Enter" && canSubmit && handleSubmit()}
-                          />
-                        )}
 
                       {exercise.hint && !submitted && !gaveUp && (
                         <p className="text-xs text-muted-foreground">{t("learn.hintLabel", { hint: exercise.hint })}</p>
@@ -1241,12 +1115,31 @@ function LearnInner() {
                           <div
                             className={[
                               "flex items-center gap-2 p-3 rounded-lg",
-                              correct ? "bg-accent/10 text-accent" : "bg-red-500/10 text-red-400",
+                              verifying
+                                ? "bg-secondary text-muted-foreground"
+                                : correct
+                                  ? "bg-accent/10 text-accent"
+                                  : "bg-red-500/10 text-red-400",
                             ].join(" ")}
                           >
-                            {correct ? <Check size={16} /> : <X size={16} />}
-                            <span className="text-sm">{correct ? t("learn.correct") : t("learn.notQuite")}</span>
-                            {correct && progress && (
+                            {/* The deterministic rungs missed and the semantic one
+                                is deciding. Saying so beats showing a red X that
+                                turns green a moment later. */}
+                            {verifying ? (
+                              <Loader2 size={16} className="animate-spin" />
+                            ) : correct ? (
+                              <Check size={16} />
+                            ) : (
+                              <X size={16} />
+                            )}
+                            <span className="text-sm">
+                              {verifying
+                                ? t("learn.checkingAnswer")
+                                : correct
+                                  ? t("learn.correct")
+                                  : t("learn.notQuite")}
+                            </span>
+                            {!verifying && correct && progress && (
                               <span className="text-xs opacity-70 ml-auto">
                                 {t("learn.toUnlockNext", {
                                   count: Math.min(
@@ -1260,17 +1153,36 @@ function LearnInner() {
                               </span>
                             )}
                           </div>
-                          {!correct && exercise.correctAnswer && (
+                          {/* The expected answer comes off the grading spec, so a
+                              numeric or symbolic exercise shows what it actually
+                              graded against rather than a legacy string field. */}
+                          {!verifying && !correct && (lastGrade?.expected || exercise.correctAnswer) && (
                             <p className="text-sm">
                               <span className="text-muted-foreground">{t("learn.answerLabel")}</span>
-                              <span className="text-accent">{exercise.correctAnswer}</span>
+                              {gradingSpec?.mode === "symbolic" ? (
+                                <span className="text-accent">
+                                  <Latex value={lastGrade?.expected ?? ""} />
+                                </span>
+                              ) : (
+                                <span className="text-accent">
+                                  {lastGrade?.expected ?? exercise.correctAnswer}
+                                </span>
+                              )}
                             </p>
+                          )}
+                          {!verifying && gradeNote && (
+                            <p className="text-xs text-muted-foreground italic">{gradeNote}</p>
                           )}
                           {exercise.explanation && (
                             <p className="text-xs text-muted-foreground">{exercise.explanation}</p>
                           )}
                           <div className="flex gap-2">
-                            <Button onClick={fetchExercise} variant="outline" className="flex-1 gap-2">
+                            <Button
+                              onClick={fetchExercise}
+                              variant="outline"
+                              className="flex-1 gap-2"
+                              disabled={verifying}
+                            >
                               <RefreshCw size={14} />
                               {t("learn.nextExercise")}
                             </Button>

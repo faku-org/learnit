@@ -111,17 +111,14 @@
     "createNewPath": "Crear nuevo camino",
     "newPath": "Nuevo Camino",
     "learningGoal": "Objetivo de Aprendizaje",
-    "languageLabel": "Idioma",
-    "languagePlaceholder": "ej., japonés, francés, alemán",
     "objectiveLabel": "Objetivo",
-    "objectivePlaceholder": "ej., mantener conversaciones básicas para viajar",
+    "objectivePlaceholder": "ej., Entender cómo los bancos centrales fijan las tasas de interés",
     "timeframeLabel": "Plazo",
     "generating": "Generando...",
     "continueBtn": "Continuar",
     "calibrationTitle": "Calibrando tu nivel de {{subject}}",
     "modulesAndTopics": "{{modules}} módulos · {{topics}} temas",
     "pathTitle": "Tu ruta de {{subject}}",
-    "toastLangObjectiveRequired": "El idioma y el objetivo son obligatorios",
     "toastActiveUpdated": "Camino activo actualizado",
     "toastUpdateActiveError": "No se pudo actualizar el camino activo",
     "toastPathDeleted": "Camino eliminado",
@@ -177,7 +174,33 @@
     "noMatches": "Ningún ejercicio coincide con tus filtros.",
     "noneYet": "Aún no hay ejercicios. Empieza a practicar para construir tu historial.",
     "answerLabel": "Respuesta: ",
-    "pageOf": "Página {{page}} de {{total}}"
+    "pageOf": "Página {{page}} de {{total}}",
+    "typeCloze": "Completa el concepto",
+    "typeShortAnswer": "Respuesta breve",
+    "typeOrdering": "Ordenar",
+    "typeFlashcard": "Tarjeta",
+    "typeNumeric": "Respuesta numérica",
+    "typeSymbolic": "Respuesta simbólica",
+    "typeDerivationOrder": "Ordena la derivación",
+    "typePlotReading": "Lee la gráfica",
+    "typeUnitConversion": "Conversión de unidades",
+    "typeSourceAnalysis": "Análisis de fuente",
+    "typeChronology": "Cronología",
+    "typeArgumentReconstruction": "Reconstruye el argumento",
+    "typeCompareContrast": "Compara y contrasta",
+    "typeCodeOutput": "Predice la salida",
+    "typeCodeFix": "Corrige el error",
+    "typeComplexity": "Complejidad"
+  },
+  "blocks": {
+    "showTranslation": "Ver traducción",
+    "hideTranslation": "Ocultar traducción",
+    "viewSource": "Ver fuente",
+    "unverified": "Cita sin verificar",
+    "unverifiedHint": "Esta atribución todavía no se ha comprobado contra una base de fuentes.",
+    "verifiedVia": "Verificado en {{provider}}",
+    "machineTranslation": "Traducción automática de un original verificado",
+    "citationOnly": "La obra está verificada, pero no se pudo localizar este pasaje en ella. Sigue el enlace para leerla en su contexto."
   },
   "speak": {
     "title": "Hablar",
@@ -275,22 +298,35 @@
     "levels": {
       "completeBeginner": {
         "label": "Principiante Total",
-        "description": "Tu camino empieza desde cero: alfabeto, frases básicas y vocabulario esencial."
+        "description": "Tu camino empieza desde cero: alfabeto, frases básicas y vocabulario esencial.",
+        "descriptionGeneral": "Tu ruta empieza desde cero: los objetos centrales del campo y el vocabulario para hablar de ellos."
       },
       "someBasics": {
         "label": "Algunas Bases",
-        "description": "Ya sabes algunas cosas. Tu camino se salta lo más básico y se enfoca en construir estructura."
+        "description": "Ya sabes algunas cosas. Tu camino se salta lo más básico y se enfoca en construir estructura.",
+        "descriptionGeneral": "Sabés algunas cosas. Tu ruta saltea las introducciones y se enfoca en convertir los fragmentos en una estructura."
       },
       "elementary": {
         "label": "Elemental",
-        "description": "Base sólida. Tu camino avanza hacia patrones gramaticales y oraciones prácticas."
+        "description": "Base sólida. Tu camino avanza hacia patrones gramaticales y oraciones prácticas.",
+        "descriptionGeneral": "Base sólida. Tu ruta va directo a la maquinaria de trabajo del tema."
       },
       "intermediate": {
         "label": "Intermedio",
-        "description": "Ya tienes las bases. Tu camino se enfoca en fluidez y estructuras complejas."
+        "description": "Ya tienes las bases. Tu camino se enfoca en fluidez y estructuras complejas.",
+        "descriptionGeneral": "Ya tenés fundamentos. Tu ruta se enfoca en profundidad, síntesis y los casos más difíciles."
       }
     },
-    "toastQuizError": "No se pudieron generar las preguntas de calibración. Intenta de nuevo."
+    "toastQuizError": "No se pudieron generar las preguntas de calibración. Intenta de nuevo.",
+    "motivationExam": "Un examen o certificación",
+    "motivationCareer": "Trabajo o carrera",
+    "motivationCourse": "Una materia que estoy cursando",
+    "motivationCuriosity": "Curiosidad, quiero entenderlo",
+    "priorNoneGeneral": "Nunca lo estudié",
+    "priorLittleGeneral": "Leí algo suelto sobre el tema",
+    "priorSomeGeneral": "Conozco las ideas y el vocabulario básico",
+    "priorMoreGeneral": "Hice un curso o lo usé en la práctica",
+    "selfRatingGreatGeneral": "Muy bien / podría explicarlo"
   },
   "roadmap": {
     "pathSuffix": "camino de {{language}}",
@@ -338,7 +374,11 @@
     "moduleDesignFailed": "No se pudo diseñar {{module}}",
     "yourNextModule": "tu próximo módulo",
     "moduleDesigningDesc": "Este módulo se está escribiendo en base a cómo te ha estado yendo, para que quede en la dificultad justa.",
-    "moduleDesignFailedDesc": "El plan de esta lección no se pudo generar. Intenta de nuevo."
+    "moduleDesignFailedDesc": "El plan de esta lección no se pudo generar. Intenta de nuevo.",
+    "checkingAnswer": "Revisando tu respuesta...",
+    "mathInputPlaceholder": "Escribe tu respuesta en LaTeX. Pulsa \\ o / para ver comandos.",
+    "mathInputHint": "Tu respuesta aparece aquí mientras escribes",
+    "explainAnswerPlaceholder": "Explica tu razonamiento en dos o tres frases"
   },
   "taxonomy": {
     "placedIn": "Área:",

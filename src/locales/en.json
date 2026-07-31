@@ -111,17 +111,14 @@
     "createNewPath": "Create new path",
     "newPath": "New Path",
     "learningGoal": "Learning Goal",
-    "languageLabel": "Language",
-    "languagePlaceholder": "e.g., Japanese, French, German",
     "objectiveLabel": "Objective",
-    "objectivePlaceholder": "e.g., Hold basic conversations for travel",
+    "objectivePlaceholder": "e.g., Understand how central banks set interest rates",
     "timeframeLabel": "Timeframe",
     "generating": "Generating...",
     "continueBtn": "Continue",
     "calibrationTitle": "Calibrating your {{subject}} level",
     "modulesAndTopics": "{{modules}} modules · {{topics}} topics",
     "pathTitle": "Your {{subject}} path",
-    "toastLangObjectiveRequired": "Language and objective are required",
     "toastActiveUpdated": "Active path updated",
     "toastUpdateActiveError": "Failed to update active path",
     "toastPathDeleted": "Path deleted",
@@ -177,7 +174,33 @@
     "noMatches": "No exercises match your filters.",
     "noneYet": "No exercises yet. Start practicing to build your history.",
     "answerLabel": "Answer: ",
-    "pageOf": "Page {{page}} of {{total}}"
+    "pageOf": "Page {{page}} of {{total}}",
+    "typeCloze": "Fill in the concept",
+    "typeShortAnswer": "Short answer",
+    "typeOrdering": "Put in order",
+    "typeFlashcard": "Flashcard",
+    "typeNumeric": "Numeric answer",
+    "typeSymbolic": "Symbolic answer",
+    "typeDerivationOrder": "Order the derivation",
+    "typePlotReading": "Read the plot",
+    "typeUnitConversion": "Unit conversion",
+    "typeSourceAnalysis": "Source analysis",
+    "typeChronology": "Chronology",
+    "typeArgumentReconstruction": "Reconstruct the argument",
+    "typeCompareContrast": "Compare and contrast",
+    "typeCodeOutput": "Predict the output",
+    "typeCodeFix": "Fix the bug",
+    "typeComplexity": "Complexity"
+  },
+  "blocks": {
+    "showTranslation": "Show translation",
+    "hideTranslation": "Hide translation",
+    "viewSource": "View source",
+    "unverified": "Unverified citation",
+    "unverifiedHint": "This attribution has not been checked against a source database yet.",
+    "verifiedVia": "Verified via {{provider}}",
+    "machineTranslation": "Machine translation of a verified original",
+    "citationOnly": "The work is verified, but this passage could not be located in it. Follow the link to read it in context."
   },
   "speak": {
     "title": "Speak",
@@ -275,22 +298,35 @@
     "levels": {
       "completeBeginner": {
         "label": "Complete Beginner",
-        "description": "Your path starts from zero — alphabet, basic phrases, and core vocabulary."
+        "description": "Your path starts from zero — alphabet, basic phrases, and core vocabulary.",
+        "descriptionGeneral": "Your path starts from zero — the core objects of the field and the vocabulary to talk about them."
       },
       "someBasics": {
         "label": "Some Basics",
-        "description": "You know a few things. Your path skips absolute basics and focuses on building structure."
+        "description": "You know a few things. Your path skips absolute basics and focuses on building structure.",
+        "descriptionGeneral": "You know a few things. Your path skips the introductions and focuses on turning fragments into a structure."
       },
       "elementary": {
         "label": "Elementary",
-        "description": "Solid foundation. Your path jumps into grammar patterns and practical sentences."
+        "description": "Solid foundation. Your path jumps into grammar patterns and practical sentences.",
+        "descriptionGeneral": "Solid foundation. Your path moves straight into the working machinery of the subject."
       },
       "intermediate": {
         "label": "Intermediate",
-        "description": "You already have foundations. Your path focuses on fluency and complex structures."
+        "description": "You already have foundations. Your path focuses on fluency and complex structures.",
+        "descriptionGeneral": "You already have foundations. Your path focuses on depth, synthesis, and the harder cases."
       }
     },
-    "toastQuizError": "Failed to generate calibration questions. Try again."
+    "toastQuizError": "Failed to generate calibration questions. Try again.",
+    "motivationExam": "An exam or certification",
+    "motivationCareer": "Work or career",
+    "motivationCourse": "A course I'm taking",
+    "motivationCuriosity": "Curiosity, I want to understand it",
+    "priorNoneGeneral": "Never studied it",
+    "priorLittleGeneral": "I've read about it here and there",
+    "priorSomeGeneral": "I know the core ideas and vocabulary",
+    "priorMoreGeneral": "I've taken a course or used it in practice",
+    "selfRatingGreatGeneral": "Very good / I can teach it"
   },
   "roadmap": {
     "pathSuffix": "{{language}} path",
@@ -338,7 +374,11 @@
     "moduleDesignFailed": "Couldn't design {{module}}",
     "yourNextModule": "your next module",
     "moduleDesigningDesc": "This module is being written around how you've actually been doing, so it lands at the right difficulty.",
-    "moduleDesignFailedDesc": "The lesson plan for this module didn't generate. Give it another go."
+    "moduleDesignFailedDesc": "The lesson plan for this module didn't generate. Give it another go.",
+    "checkingAnswer": "Checking your answer...",
+    "mathInputPlaceholder": "Write your answer in LaTeX. Press \\ or / for commands.",
+    "mathInputHint": "Your answer appears here as you type",
+    "explainAnswerPlaceholder": "Explain your reasoning in two or three sentences"
   },
   "taxonomy": {
     "placedIn": "Area:",

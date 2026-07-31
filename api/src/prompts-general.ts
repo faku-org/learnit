@@ -65,15 +65,41 @@ const BLOCK_SCHEMAS: Record<string, string> = {
   table: `{ "kind": "table", "headers": ["Year", "GDP"], "rows": [["2020", "1.2"], ["2021", "1.4"]], "caption": "optional" }`,
 };
 
+/** Corpora the verification pipeline can actually check a citation against. */
+const PROVIDER_CORPORA: Record<string, string> = {
+  perseus: "Perseus (canonical Greek and Latin: Homer, Herodotus, Thucydides, Plato, Xenophon, the tragedians, Caesar, Cicero, Virgil, Horace, Ovid, Sallust, Lucretius, Catullus, Seneca, Suetonius)",
+  wikisource: "Wikisource (public-domain works and documents in many languages)",
+  gutenberg: "Project Gutenberg (full public-domain books)",
+  crossref: "Crossref (journal articles by DOI)",
+  openalex: "OpenAlex (academic works)",
+  arxiv: "arXiv (preprints by id)",
+};
+
 function blocksSection(spec: DomainSpec, nativeLanguage: string): string {
   const allowed = spec.blocks.filter((b) => BLOCK_SCHEMAS[b]);
   const schemas = allowed
     .map((b) => `  - ${BLOCK_SCHEMAS[b].replace(/NATIVE/g, nativeLanguage)}`)
     .join("\n");
+
+  // Telling the generator which corpora are consulted raises the share of
+  // citations that survive verification, which is the difference between an
+  // exercise that has a source block and one whose source block was dropped.
+  const corpora = allowed.includes("source")
+    ? spec.sourceProviders.map((id) => PROVIDER_CORPORA[id]).filter(Boolean)
+    : [];
+  const corporaNote =
+    corpora.length > 0
+      ? `\n\nA source claim is checked against these corpora, and the block is DROPPED if it cannot be found:
+${corpora.map((c) => `  - ${c}`).join("\n")}
+Cite something these actually hold, give the locus in the work's own numbering
+(e.g. "1.22", "Book 3, chapter 4"), and set "passage" to the opening words as
+they truly appear. A citation you are not certain of costs the student the block.`
+      : "";
+
   return `"blocks" is an ordered array presenting the problem. Allowed kinds for this subject:
 ${schemas}
 
-Never emit raw HTML or raw SVG in any field. Every visual is a declarative spec from the list above.`;
+Never emit raw HTML or raw SVG in any field. Every visual is a declarative spec from the list above.${corporaNote}`;
 }
 
 // ── Grading schema ────────────────────────────────────────────────────────────

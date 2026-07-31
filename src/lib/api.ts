@@ -219,6 +219,10 @@ export const recordAnswer = (data: {
   conceptIds?: string[];
   gradingMode?: string;
   score?: number;
+  /** True when the semantic rung overturned a deterministic mismatch. */
+  semanticOverride?: boolean;
+  /** Which rung of the grading ladder settled it. */
+  gradedVia?: string;
   examId?: string | null;
   sessionPosition?: number;
   afterGiveUp?: boolean;
@@ -228,6 +232,31 @@ export const recordAnswer = (data: {
     points?: number;
     sessionTotals?: { total: number; correct: number; points: number; pass: number };
   }>("/api/exercises/answer", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+
+export type SemanticVerdict = {
+  correct: boolean;
+  equivalence: "exact" | "equivalent" | "partial" | "wrong";
+  note: string;
+  misconception?: string;
+  cached: boolean;
+};
+
+/**
+ * Rung 4 of the grading ladder. Only ever called after the deterministic rungs
+ * missed, so it can overturn a wrong to a right and never the reverse.
+ */
+export const gradeSemantic = (data: {
+  question: string;
+  expected: string;
+  actual: string;
+  taxonomy: string[];
+  gradingMode: string;
+  nativeLanguage?: string;
+}) =>
+  request<SemanticVerdict>("/api/grade/semantic", {
     method: "POST",
     body: JSON.stringify(data),
   });

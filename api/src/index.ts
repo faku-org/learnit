@@ -14,7 +14,11 @@ import {
 } from "./schemas";
 import { generateJSON, validateExercise, PRO_MODEL } from "./llm";
 import { seedTaxonomy, bumpPathCount, allNodes } from "./taxonomy";
-import { isLanguagePath, type ExerciseType } from "./domains";
+import { isLanguagePath, type BlockKind, type ExerciseType } from "./domains";
+import { sanitizeBlocks } from "./blocks";
+import { parseGradingSpec } from "./grading";
+import { gradeSemantically } from "./semantic";
+import { ensureSourceIndexes, resolveSourceBlocks } from "./sources";
 import { classifySubject, classificationFor, checkScope, buildSubjectContext } from "./classify";
 import {
   pathOutlinePrompt,
@@ -120,6 +124,66 @@ function computeDifficultyNote(recentScores: number[], bias: number): string | u
   if (adjusted > 0.85)
     return "Generate a harder exercise: complex vocabulary, idiomatic expressions, nuanced grammar.";
   return undefined;
+}
+
+// ── Generated content, rebuilt before it is stored ────────────────────────────
+
+/**
+ * A generated exercise with its two structured fields re-read from a whitelist.
+ *
+ * Everything else the model returned is prose and is stored as-is, as it always
+ * has been. `blocks` and `grading` are different: blocks are rendered, exercises
+ * are SHARED ACROSS USERS, and a generator that could emit markup would be
+ * stored XSS against everyone who later draws the exercise. So the stored block
+ * array is rebuilt field by field rather than passed through, and a grading spec
+ * that does not typecheck is dropped so the legacy fields grade it instead of a
+ * half-formed one.
+ */
+function safeExerciseFields(
+  raw: Record<string, unknown>,
+  spec: { blocks: BlockKind[] },
+  resolvedBlocks?: unknown,
+): Record<string, unknown> {
+  const { blocks, grading, ...rest } = raw;
+  const cleanBlocks = sanitizeBlocks(resolvedBlocks ?? blocks, spec.blocks);
+  const cleanGrading = parseGradingSpec(grading);
+  return {
+    ...rest,
+    ...(cleanBlocks.length > 0 ? { blocks: cleanBlocks } : {}),
+    ...(cleanGrading ? { grading: cleanGrading } : {}),
+  };
+}
+
+/** Exercise types whose question is unanswerable without the source it cites. */
+const SOURCE_DEPENDENT: ReadonlySet<string> = new Set(["source_analysis", "reading_comprehension"]);
+
+/**
+ * Retrieve and verify every source the generator proposed.
+ *
+ * The generator is never trusted for a citation: asked for a primary source it
+ * will invent one with a plausible attribution, and telling it not to does not
+ * work. So each claim is resolved against a real corpus and the block is either
+ * rewritten with the retrieved text or dropped.
+ *
+ * The returned `lostItsSource` flag is what drives regeneration: an exercise
+ * that asks the student to read a passage is worthless once the passage is gone.
+ */
+async function verifySources(
+  db: Db,
+  exercise: Record<string, unknown>,
+  ctx: SubjectContext,
+  type: string,
+): Promise<{ blocks: unknown[]; lostItsSource: boolean }> {
+  const outcome = await resolveSourceBlocks(db, exercise.blocks, ctx.spec, ctx.nativeLanguage)
+    .catch(() => null);
+  if (!outcome) {
+    return { blocks: Array.isArray(exercise.blocks) ? exercise.blocks : [], lostItsSource: false };
+  }
+  return {
+    blocks: outcome.blocks,
+    lostItsSource:
+      SOURCE_DEPENDENT.has(type) && outcome.proposed > 0 && outcome.verified === 0,
+  };
 }
 
 // ── Segmented path generation ─────────────────────────────────────────────────
@@ -375,6 +439,7 @@ const app = new Elysia()
   .onStart(async () => {
     const db = await connectDB();
     await seedTaxonomy(db);
+    await ensureSourceIndexes(db);
   })
 
   .get("/api/health", () => ({
@@ -1103,6 +1168,7 @@ const app = new Elysia()
         temperature: 0.9,
         maxTokens: 2048,
       });
+      const sources = await verifySources(db, exercise, ctx, type as string);
 
       const leaf = classification.taxonomyLeaf;
       // A path created before the taxonomy work pins its own key; a new one
@@ -1117,7 +1183,7 @@ const app = new Elysia()
         bankKey: bank,
         topicKey: topicKeyOf(bank, topic, level),
         tags: [topic.toLowerCase(), type, leaf, level],
-        ...exercise,
+        ...safeExerciseFields(exercise, ctx.spec, sources.blocks),
         createdAt: new Date().toISOString(),
       };
       const result = await db.collection("exercises").insertOne(doc);
@@ -1258,6 +1324,28 @@ const app = new Elysia()
       }
     }
 
+    // Retrieve and verify every cited source. A citation the generator invented
+    // fails here and its block is dropped; if that leaves a source-dependent
+    // exercise with nothing to read, the exercise is written once more rather
+    // than served as an unanswerable question.
+    let sources = await verifySources(db, exercise, ctx, nextType);
+    if (sources.lostItsSource) {
+      const retry = exercisePrompt(ctx, { level, topic, type: nextType });
+      const regenerated = await generateJSON<Record<string, unknown>>(retry.system, retry.user, {
+        temperature: 0.7,
+        maxTokens: 2048,
+      }).catch(() => null);
+      if (regenerated) {
+        const retrySources = await verifySources(db, regenerated, ctx, nextType);
+        // Only accept the second attempt if it actually did better; otherwise
+        // keep the first, which at least had a validated question.
+        if (!retrySources.lostItsSource) {
+          exercise = regenerated;
+          sources = retrySources;
+        }
+      }
+    }
+
     const doc = {
       subject,
       language: isLanguagePath(classification.taxonomy) ? subject : null,
@@ -1267,7 +1355,7 @@ const app = new Elysia()
       bankKey: bank,
       topicKey,
       tags: [topic.toLowerCase(), nextType, leaf, level],
-      ...exercise,
+      ...safeExerciseFields(exercise, ctx.spec, sources.blocks),
       validatedAt: new Date().toISOString(),
       createdAt: new Date().toISOString(),
     };
@@ -1305,6 +1393,7 @@ const app = new Elysia()
       // MindVault memory fields. All optional: an older client omits them and
       // the attempt still records, just with less context.
       confidence = null, conceptIds = [], gradingMode = "exact", score,
+      semanticOverride = false, gradedVia = "exact",
       examId = null, sessionPosition = 0, afterGiveUp = false, inExam = false,
     } = body as {
       exerciseId: string;
@@ -1322,6 +1411,8 @@ const app = new Elysia()
       conceptIds?: string[];
       gradingMode?: string;
       score?: number;
+      semanticOverride?: boolean;
+      gradedVia?: string;
       examId?: string | null;
       sessionPosition?: number;
       afterGiveUp?: boolean;
@@ -1422,6 +1513,8 @@ const app = new Elysia()
       confidence,
       gradingMode,
       score: score ?? (outcome === "correct" ? 1 : 0),
+      semanticOverride,
+      gradedVia,
       examId,
       context: {
         sessionPosition,
@@ -1459,6 +1552,39 @@ const app = new Elysia()
         pass: session.pass,
       },
     };
+  })
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Semantic grading, rung 4 of the ladder
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  .post("/api/grade/semantic", async ({ body, headers, set }: any) => {
+    const user = await requireUser(headers.authorization, set);
+    if (!user) return { error: "Unauthorized" };
+
+    const {
+      question = "", expected = "", actual = "",
+      taxonomy = [], gradingMode = "exact", nativeLanguage = "english",
+    } = body as {
+      question?: string;
+      expected?: string;
+      actual?: string;
+      taxonomy?: string[];
+      gradingMode?: string;
+      nativeLanguage?: string;
+    };
+
+    if (!expected || !actual) {
+      set.status = 400;
+      return { error: "expected and actual are required" };
+    }
+
+    const db = await getDB();
+    return gradeSemantically(db, {
+      question, expected, actual,
+      taxonomy: Array.isArray(taxonomy) ? taxonomy : [],
+      gradingMode, nativeLanguage,
+    });
   })
 
   // ═══════════════════════════════════════════════════════════════════════════
