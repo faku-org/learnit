@@ -116,7 +116,6 @@
     "objectiveLabel": "Objetivo",
     "objectivePlaceholder": "ej., mantener conversaciones básicas para viajar",
     "timeframeLabel": "Plazo",
-    "timeframePlaceholder": "ej., 3 meses, 6 meses",
     "generating": "Generando...",
     "continueBtn": "Continuar",
     "calibrationTitle": "Calibrando tu nivel de {{subject}}",
@@ -132,7 +131,12 @@
     "subjectLabel": "¿Qué querés aprender?",
     "subjectPlaceholder": "Japonés, Macroeconomía, Mecánica Cuántica, Historia Romana...",
     "toastSubjectObjectiveRequired": "La materia y el objetivo son obligatorios",
-    "preparing": "Preparando..."
+    "preparing": "Preparando...",
+    "timeframe1Month": "1 mes",
+    "timeframe3Months": "3 meses",
+    "timeframe6Months": "6 meses",
+    "timeframe1Year": "1 año",
+    "timeframeOpen": "Sin fecha"
   },
   "vocabulary": {
     "title": "Vocabulario",

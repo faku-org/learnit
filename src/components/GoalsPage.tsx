@@ -52,11 +52,27 @@ type LearningPath = {
 /** Which step of path creation the form is on. */
 type Stage = "form" | "scoping" | "calibration";
 
+/**
+ * Preset horizons, in place of a free-text field.
+ *
+ * The value is what reaches the outline prompt, so it stays in English and
+ * stable regardless of the interface language; only the label is translated.
+ */
+const TIMEFRAMES = [
+  { value: "1 month", labelKey: "goals.timeframe1Month" },
+  { value: "3 months", labelKey: "goals.timeframe3Months" },
+  { value: "6 months", labelKey: "goals.timeframe6Months" },
+  { value: "1 year", labelKey: "goals.timeframe1Year" },
+  { value: "no deadline", labelKey: "goals.timeframeOpen" },
+] as const;
+
+const DEFAULT_TIMEFRAME = "6 months";
+
 function GoalsInner() {
   const { t } = useTranslation();
   const [subject, setSubject] = useState("");
   const [objective, setObjective] = useState("");
-  const [timeframe, setTimeframe] = useState("6 months");
+  const [timeframe, setTimeframe] = useState(DEFAULT_TIMEFRAME);
   const [generating, setGenerating] = useState(false);
   const [paths, setPaths] = useState<LearningPath[]>([]);
   const [activePathId, setActivePathId] = useState<string | null>(null);
@@ -173,7 +189,7 @@ function GoalsInner() {
       setShowForm(false);
       setSubject("");
       setObjective("");
-      setTimeframe("6 months");
+      setTimeframe(DEFAULT_TIMEFRAME);
       setClassification(null);
       setScopeReport(null);
       toast.success(t("goals.toastPathGenerated"));
@@ -343,12 +359,25 @@ function GoalsInner() {
                       />
                     </div>
                     <div>
-                      <label className="text-xs text-muted-foreground mb-1 block">{t("goals.timeframeLabel")}</label>
-                      <Input
-                        placeholder={t("goals.timeframePlaceholder")}
-                        value={timeframe}
-                        onChange={(e) => setTimeframe(e.target.value)}
-                      />
+                      <label className="text-xs text-muted-foreground mb-2 block">{t("goals.timeframeLabel")}</label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {TIMEFRAMES.map(({ value, labelKey }) => (
+                          <button
+                            key={value}
+                            type="button"
+                            onClick={() => setTimeframe(value)}
+                            aria-pressed={timeframe === value}
+                            className={cn(
+                              "px-3 py-1.5 rounded-lg border text-xs transition-colors cursor-pointer",
+                              timeframe === value
+                                ? "border-primary bg-primary/10 text-foreground font-medium"
+                                : "border-border text-muted-foreground hover:border-primary/30 hover:text-foreground",
+                            )}
+                          >
+                            {t(labelKey)}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                     <div className="flex gap-2">
                       <Button
