@@ -1,32 +1,36 @@
 # LearnIt!
 
-AI-powered language learning app. Practice with generated exercises, build vocabulary, and track your progress.
+AI-powered language learning app. Practice with LLM-generated exercises, build vocabulary, and track your goals and streaks.
 
-## Stack
-
-| Layer | Tech |
-|---|---|
-| Frontend | Astro v7, React 19, TailwindCSS v4, shadcn/ui, motion/react |
-| Backend | Elysia (Bun-native), MongoDB |
-| AI | Deepseek via OpenAI-compatible SDK |
-| Runtime | Bun |
+LearnIt! is a full-stack language learning application. The frontend (Astro + React 19) renders a set of SPA pages — learning, exercises, vocabulary, speaking, goals, and settings — while a Bun-native Elysia API persists progress in MongoDB and generates personalized content with Deepseek through the OpenAI-compatible SDK.
 
 ## Features
 
-- **Learning paths** — LLM-generated personalized curriculum for any language and goal
-- **Exercises** — Multiple choice, fill-in-the-blank, and translation with preloading (2 ahead)
-- **"I don't know"** — Request an AI explanation with key points and examples when stuck
+- **Learning paths** — LLM-generated personalized curriculum for any language, objective, and timeframe
+- **Exercises** — Multiple choice, fill-in-the-blank, and translation exercises, with a prefetch queue that keeps the next 2 ready while you practice
+- **"I don't know"** — Request an AI explanation focused on the underlying concept, delivered in your native language, when stuck
 - **Translate** — Reveal the meaning of any exercise phrase on demand
 - **Vocabulary** — Save words with auto-generated conjugations and usage examples
-- **Speak** — Listen to phrases and practice pronunciation via Web Speech API
-- **Settings** — Switch active learning path and explanation language
+- **Speak** — Listen to phrases and practice pronunciation via the Web Speech API
+- **Goals & streaks** — Set learning goals and track your daily streak
+- **Settings** — Switch the active learning path and the explanation (native) language
 
-## Setup
+## Tech stack
+
+| Layer | Tech |
+|-------|------|
+| Frontend | Astro 7, React 19, TailwindCSS v4, shadcn/ui-style primitives, Motion, Sonner |
+| Backend | Elysia (Bun-native), MongoDB, Zod |
+| AI | Deepseek via the OpenAI-compatible SDK |
+| Runtime | Bun |
+| Tooling | TypeScript, oxlint, oxfmt |
+
+## Getting started
 
 ### Prerequisites
 
 - [Bun](https://bun.sh) >= 1.0
-- MongoDB running locally (or Atlas URI)
+- MongoDB running locally (or an Atlas connection string)
 - Deepseek API key — [platform.deepseek.com](https://platform.deepseek.com/)
 
 ### Install
@@ -40,7 +44,7 @@ cd api && bun install
 
 ```bash
 cp api/.env.example api/.env
-# Edit api/.env — set DEEPSEEK_API_KEY at minimum
+# Edit api/.env — set DEEPSEEK_API_KEY (and MONGO_URI / DB_NAME if needed)
 ```
 
 ### Run
@@ -55,21 +59,25 @@ bun dev
 bun run api
 ```
 
+The frontend points to the API through `src/lib/api.ts`, which defaults to `http://localhost:3001` and can be overridden with the `VITE_API_URL` environment variable.
+
 ## Project structure
 
 ```
 learnit/
 ├── src/
-│   ├── components/     # React page components + shadcn/ui
+│   ├── components/     # React page components + ui primitives
 │   ├── layouts/        # Astro layouts
+│   ├── lib/api.ts      # Typed fetch client
 │   ├── pages/          # Astro routes
-│   └── lib/api.ts      # Typed fetch client
+│   └── styles/         # Global styles
 └── api/
     └── src/
-        ├── index.ts    # Elysia routes
+        ├── index.ts    # Elysia routes (goals, streaks, vocabulary, paths, exercises, progress)
         ├── prompts.ts  # LLM prompt builders
-        ├── llm.ts      # Deepseek client
+        ├── llm.ts      # Deepseek client (OpenAI-compatible)
         ├── db.ts       # MongoDB connection
+        ├── preload.ts  # Startup preload (env, client init)
         └── schemas.ts  # Zod schemas
 ```
 
@@ -82,3 +90,7 @@ bun run typecheck  # tsc --noEmit
 bun run lint       # oxlint
 bun run format     # oxfmt
 ```
+
+## License
+
+Apache-2.0
