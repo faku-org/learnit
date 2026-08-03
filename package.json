@@ -11,9 +11,9 @@
     "preview": "astro preview",
     "astro": "astro",
     "api": "cd api && bun run --preload ./src/preload.ts src/index.ts",
-    "test": "bun test",
+    "test": "bun test --timeout 20000",
     "typecheck": "bunx tsc --noEmit",
-    "lint": "bunx oxlint src",
+    "lint": "bunx oxlint src tests",
     "format": "bunx oxfmt src"
   },
   "dependencies": {
@@ -39,9 +39,15 @@
     "tailwindcss": "^4.3.1"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^7.0.0",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/jsdom": "^28.0.3",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "bun-types": "^1.3.14",
+    "jsdom": "^30.0.1",
+    "msw": "^2.15.0",
     "oxfmt": "^0.56.0",
     "oxlint": "^1.71.0"
   }

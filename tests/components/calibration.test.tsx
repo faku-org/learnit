@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { CalibrationFlow } from "./CalibrationFlow";
+import { CalibrationFlow } from "@/components/CalibrationFlow";
 import "@/lib/i18n";
 
 // The projective questions open every path, and their ANSWERS used to be

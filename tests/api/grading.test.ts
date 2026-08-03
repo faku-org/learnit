@@ -1,14 +1,17 @@
 import { describe, expect, test } from "bun:test";
-import { evalExpr, parseExpr } from "./expr";
+import { evalExpr, parseExpr } from "../../api/src/expr";
 import {
+  answerKindFor,
+  answerToText,
   gradeDeterministic,
   gradingSpecOf,
   latexToExpr,
+  parseGradingSpec,
   parseQuantity,
   symbolicallyEqual,
   type GradingSpec,
-} from "./grading";
-import { sanitizeBlocks } from "./blocks";
+} from "../../api/src/grading";
+import { sanitizeBlocks } from "../../api/src/blocks";
 
 const text = (value: string) => ({ kind: "text" as const, value });
 
@@ -204,6 +207,131 @@ describe("legacy exercises", () => {
       correctAnswer: "nonsense",
     });
     expect(spec.mode).toBe("numeric");
+  });
+
+  test("a matching exercise maps to a set spec", () => {
+    const spec = gradingSpecOf({ type: "matching", pairs: [{ left: "a", right: "1" }] });
+    expect(spec).toEqual({ mode: "set", pairs: [{ left: "a", right: "1" }] });
+  });
+
+  test("a word_order exercise maps to an order spec", () => {
+    const spec = gradingSpecOf({ type: "word_order", words: ["ich", "gehe"] });
+    expect(spec).toEqual({ mode: "order", items: ["ich", "gehe"] });
+  });
+
+  test("an unknown type falls back to an exact spec", () => {
+    const spec = gradingSpecOf({ type: "flashcard", correctAnswer: "42" });
+    expect(spec.mode).toBe("exact");
+    expect((spec as Extract<GradingSpec, { mode: "exact" }>).answer).toBe("42");
+  });
+
+  test("a fill-in-the-blank without a sentence still grades the token", () => {
+    const spec = gradingSpecOf({ type: "fill_blank", correctAnswer: "Auto" });
+    expect(gradeDeterministic(spec, text("Auto")).correct).toBe(true);
+  });
+});
+
+describe("parseGradingSpec", () => {
+  test("rejects non-objects and arrays", () => {
+    expect(parseGradingSpec(null)).toBeNull();
+    expect(parseGradingSpec("x")).toBeNull();
+    expect(parseGradingSpec([{ mode: "exact" }])).toBeNull();
+  });
+
+  test("rejects an unknown mode", () => {
+    expect(parseGradingSpec({ mode: "guess" })).toBeNull();
+  });
+
+  test("parses an exact spec and filters the accept list", () => {
+    expect(parseGradingSpec({ mode: "exact", answer: "x" })).toEqual({ mode: "exact", answer: "x", accept: undefined, normalize: undefined });
+    expect(parseGradingSpec({ mode: "exact", answer: "x", accept: ["y", 3, ""], normalize: "loose" })).toEqual({
+      mode: "exact", answer: "x", accept: ["y"], normalize: "loose",
+    });
+  });
+
+  test("rejects an exact spec with a blank answer", () => {
+    expect(parseGradingSpec({ mode: "exact", answer: "  " })).toBeNull();
+  });
+
+  test("parses a numeric spec with validated tolerance and sig figs", () => {
+    expect(parseGradingSpec({ mode: "numeric", value: 9.81, tolerance: 0.01, relative: true, unit: "m/s^2" })).toMatchObject({
+      mode: "numeric", value: 9.81, tolerance: 0.01, relative: true, unit: "m/s^2",
+    });
+    expect(parseGradingSpec({ mode: "numeric", value: 9.81, tolerance: -1, sigFigs: 4.7 })).toMatchObject({
+      tolerance: undefined, sigFigs: 5,
+    });
+  });
+
+  test("rejects a numeric spec without a finite value", () => {
+    expect(parseGradingSpec({ mode: "numeric", value: "abc" })).toBeNull();
+  });
+
+  test("parses a choice spec and rejects a negative index", () => {
+    expect(parseGradingSpec({ mode: "choice", correctIndex: 2 })).toEqual({ mode: "choice", correctIndex: 2 });
+    expect(parseGradingSpec({ mode: "choice", correctIndex: -1 })).toBeNull();
+    expect(parseGradingSpec({ mode: "choice", correctIndex: 1.5 })).toBeNull();
+  });
+
+  test("parses a set spec and drops malformed pairs", () => {
+    expect(parseGradingSpec({ mode: "set", pairs: [{ left: "a", right: "1" }, { right: "2" }, "x"] })).toEqual({
+      mode: "set", pairs: [{ left: "a", right: "1" }],
+    });
+    expect(parseGradingSpec({ mode: "set", pairs: [{ right: "2" }] })).toBeNull();
+  });
+
+  test("parses an order spec and filters non-strings", () => {
+    expect(parseGradingSpec({ mode: "order", items: ["a", 3, "b"] })).toEqual({ mode: "order", items: ["a", "b"] });
+    expect(parseGradingSpec({ mode: "order", items: [] })).toBeNull();
+  });
+
+  test("parses a symbolic spec", () => {
+    expect(parseGradingSpec({ mode: "symbolic", latex: "x^2", variables: ["x"] })).toEqual({
+      mode: "symbolic", latex: "x^2", variables: ["x"],
+    });
+    expect(parseGradingSpec({ mode: "symbolic", latex: " " })).toBeNull();
+  });
+
+  test("parses a rubric spec with criteria normalization", () => {
+    const spec = parseGradingSpec({
+      mode: "rubric",
+      modelAnswer: "limit exists",
+      criteria: [{ id: "c1", description: "uses definition", weight: 2 }, { description: "" }, null],
+      passScore: 0.7,
+    });
+    expect(spec).toMatchObject({ mode: "rubric", modelAnswer: "limit exists", passScore: 0.7 });
+    const rubric = spec as Extract<GradingSpec, { mode: "rubric" }> | null;
+    expect(rubric?.criteria).toHaveLength(1);
+    expect(rubric?.criteria[0]).toEqual({ id: "c1", description: "uses definition", weight: 2 });
+    expect(parseGradingSpec({ mode: "rubric", modelAnswer: "" })).toBeNull();
+  });
+});
+
+describe("answerKindFor", () => {
+  test("maps structural modes to their input kinds", () => {
+    expect(answerKindFor("choice")).toBe("choice");
+    expect(answerKindFor("set")).toBe("set");
+    expect(answerKindFor("order")).toBe("order");
+  });
+
+  test("maps every text-driven mode to text", () => {
+    expect(answerKindFor("exact")).toBe("text");
+    expect(answerKindFor("numeric")).toBe("text");
+    expect(answerKindFor("symbolic")).toBe("text");
+    expect(answerKindFor("rubric")).toBe("text");
+  });
+});
+
+describe("answerToText", () => {
+  test("flattens each answer kind", () => {
+    expect(answerToText({ kind: "text", value: "Haus" })).toBe("Haus");
+    expect(answerToText({ kind: "choice", index: 2 }, ["a", "b", "c"])).toBe("c");
+    expect(answerToText({ kind: "order", items: ["ich", "gehe"] })).toBe("ich gehe");
+    expect(answerToText({ kind: "set", selections: { a: "1", b: "2" } })).toBe("a → 1, b → 2");
+  });
+
+  test("a null choice index resolves via options or a position label", () => {
+    expect(answerToText({ kind: "choice", index: null })).toBe("");
+    expect(answerToText({ kind: "choice", index: 2 })).toBe("#3");
   });
 });
 

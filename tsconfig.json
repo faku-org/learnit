@@ -8,6 +8,7 @@
     // relative to this file, which is what "./src/*" already assumed.
     "paths": {
       "@/*": ["./src/*"],
+      "@tests/*": ["./tests/*"],
       // Pure, dependency-free modules the client and the server must agree on
       // exactly: the expression parser and the deterministic grading ladder.
       // They live under the API because it is the authority on a grade, and the

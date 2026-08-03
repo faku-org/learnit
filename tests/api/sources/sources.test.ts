@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { decodeEntities, htmlToText, normalizeWhitespace, tagText, xmlToText } from "./http";
-import { excerptFor, locatePassage } from "./excerpt";
-import { resolveWork } from "./perseus";
+import { decodeEntities, htmlToText, normalizeWhitespace, tagText, xmlToText } from "../../../api/src/sources/http";
+import { excerptFor, locatePassage } from "../../../api/src/sources/excerpt";
+import { resolveWork } from "../../../api/src/sources/perseus";
 
 // Pure logic only. The live-provider checks live in sources.live.test.ts, which
 // is opt-in: this suite must pass on a machine with no network.

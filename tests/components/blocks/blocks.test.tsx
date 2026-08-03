@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { sanitizeBlocks, type ContentBlock } from "@shared/blocks";
-import { ContentBlocks } from "./ContentBlocks";
+import { ContentBlocks } from "@/components/blocks/ContentBlocks";
 import "@/lib/i18n";
 
 // The block pipeline end to end: whatever a generator returns, through the

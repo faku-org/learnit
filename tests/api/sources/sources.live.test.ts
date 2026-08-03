@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { createPerseusProvider } from "./perseus";
-import { createWikisourceProvider } from "./wikisource";
-import { createGutenbergProvider } from "./gutenberg";
-import { createCrossrefProvider } from "./academic";
+import { createPerseusProvider } from "../../../api/src/sources/perseus";
+import { createWikisourceProvider } from "../../../api/src/sources/wikisource";
+import { createGutenbergProvider } from "../../../api/src/sources/gutenberg";
+import { createCrossrefProvider } from "../../../api/src/sources/academic";
 
 // Live checks against the real corpora. Opt in with LIVE_SOURCES=1, because a
 // suite that fails when the network is unavailable is a suite people stop
