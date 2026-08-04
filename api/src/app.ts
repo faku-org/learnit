@@ -12,7 +12,7 @@ import {
   type Attempt,
   type TopicSession,
 } from "./schemas";
-import { generateJSON, validateExercise, PRO_MODEL } from "./llm";
+import { generateJSON, validateExercise, FLASH_MODEL } from "./llm";
 import { seedTaxonomy, bumpPathCount, allNodes } from "./taxonomy";
 import { isLanguagePath, type BlockKind, type ExerciseType } from "./domains";
 import { sanitizeBlocks } from "./blocks";
@@ -255,7 +255,10 @@ async function generateModuleTopics(
   });
   const { topics } = await generateJSON<{ topics: PathTopic[] }>(system, user, {
     temperature: 0.7,
-    maxTokens: 2048,
+    // deepseek-v4-flash is a reasoning model: hidden reasoning_tokens are
+    // deducted from this same budget before any visible content, and that
+    // spend is highly variable. Give it room to reason plus write the JSON.
+    maxTokens: 16384,
   });
   return topics.map((t, i) => ({
     name: t.name,
@@ -315,7 +318,7 @@ async function probeTopicsFor(
       const generated = await generateJSON<{ levels: CalibrationBlueprint }>(
         CALIBRATION_BLUEPRINT_SYSTEM_PROMPT,
         buildCalibrationBlueprintPrompt(ctx),
-        { temperature: 0.6, maxTokens: 2048, model: PRO_MODEL },
+        { temperature: 0.6, maxTokens: 2048, model: FLASH_MODEL },
       );
       const insert = {
         taxonomyLeaf: key,
@@ -677,7 +680,7 @@ export const app = new Elysia()
       }>(
         VOCAB_ENRICH_SYSTEM_PROMPT,
         buildVocabEnrichPrompt(word, meaning ?? "", language, nativeLanguage),
-        { temperature: 0.3, maxTokens: 1024, model: PRO_MODEL },
+        { temperature: 0.3, maxTokens: 1024, model: FLASH_MODEL },
       );
       const db = await getDB();
       await db
@@ -780,7 +783,7 @@ export const app = new Elysia()
     }
   })
 
-  // Path generation is segmented: PRO_MODEL writes the module outline (cheap
+  // Path generation is segmented: flash writes the module outline (cheap
   // enough for a long path in one call), then module 1's topics are filled in.
   // Later modules are filled in on demand from real performance.
   .post("/api/path/generate", async ({ body, headers, set }: any) => {
@@ -826,7 +829,7 @@ export const app = new Elysia()
       const outline = await generateJSON<{ modules: PathModule[] }>(system, prompt, {
         temperature: 0.7,
         maxTokens: 3000,
-        model: PRO_MODEL,
+        model: FLASH_MODEL,
       });
 
       const normalized: PathModule[] = outline.modules.map((m, i) => ({
@@ -1166,7 +1169,7 @@ export const app = new Elysia()
       });
       const exercise = await generateJSON<Record<string, unknown>>(system, prompt, {
         temperature: 0.9,
-        maxTokens: 2048,
+        maxTokens: 4096,
       });
       const sources = await verifySources(db, exercise, ctx, type as string);
 

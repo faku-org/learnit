@@ -3,10 +3,8 @@ import OpenAI from "openai";
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY ?? "";
 const DEEPSEEK_BASE_URL = "https://api.deepseek.com/";
 
-// Flash: high-volume calls (exercises, calibration, validation, explanations)
-// Pro:   one-time quality calls (path generation)
+// Every call uses flash: it was upgraded to match the pro model's benchmarks.
 export const FLASH_MODEL = "deepseek-v4-flash";
-export const PRO_MODEL = "deepseek-v4-pro";
 
 let client: OpenAI | null = null;
 
@@ -48,24 +46,42 @@ export async function generateJSON<T>(
   userPrompt: string,
   opts?: { temperature?: number; maxTokens?: number; model?: string },
 ): Promise<T> {
-  const text = await generateCompletion(
-    systemPrompt +
-      "\nRespond ONLY with valid JSON. No markdown, no explanation, just the JSON object.",
-    userPrompt,
-    opts,
-  );
+  // deepseek-v4-flash is a reasoning model: hidden reasoning_tokens draw from
+  // the same max_tokens budget before any visible content, and that spend is
+  // highly variable (thousands of tokens for non-trivial prompts). A budget
+  // the reasoning exhausts returns an empty completion ("Unexpected EOF" on
+  // parse). Retry once with a budget covering the observed worst case.
+  const attempts: { maxTokens: number }[] = [
+    { maxTokens: opts?.maxTokens ?? 4096 },
+    { maxTokens: 32768 },
+  ];
 
-  let cleaned = text
-    .replace(/^```(?:json)?\s*/i, "")
-    .replace(/\s*```\s*$/i, "")
-    .trim();
+  let lastErr: unknown;
+  for (const attempt of attempts) {
+    try {
+      const text = await generateCompletion(
+        systemPrompt +
+          "\nRespond ONLY with valid JSON. No markdown, no explanation, just the JSON object.",
+        userPrompt,
+        { ...opts, ...attempt },
+      );
 
-  if (!cleaned.startsWith("{") && !cleaned.startsWith("[")) {
-    const match = cleaned.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
-    if (match) cleaned = match[1].trim();
+      let cleaned = text
+        .replace(/^```(?:json)?\s*/i, "")
+        .replace(/\s*```\s*$/i, "")
+        .trim();
+
+      if (!cleaned.startsWith("{") && !cleaned.startsWith("[")) {
+        const match = cleaned.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
+        if (match) cleaned = match[1].trim();
+      }
+
+      return JSON.parse(cleaned) as T;
+    } catch (err) {
+      lastErr = err;
+    }
   }
-
-  return JSON.parse(cleaned) as T;
+  throw lastErr;
 }
 
 export type ValidationResult = {

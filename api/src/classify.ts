@@ -1,5 +1,5 @@
 import type { Db } from "mongodb";
-import { generateJSON, PRO_MODEL } from "./llm";
+import { generateJSON, FLASH_MODEL } from "./llm";
 import {
   allNodes,
   breadcrumb,
@@ -79,7 +79,7 @@ export async function classifySubject(
     response = await generateJSON<ClassifyResponse>(
       CLASSIFY_SYSTEM_PROMPT,
       buildClassifyPrompt(subject, objective, candidates),
-      { temperature: 0.2, maxTokens: 512, model: PRO_MODEL },
+      { temperature: 0.2, maxTokens: 512, model: FLASH_MODEL },
     );
   } catch {
     return await describe(db, "general", 0, false, null);
