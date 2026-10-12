@@ -28,6 +28,7 @@ async function main(): Promise<void> {
   console.log(`  email encryption     ${encrypts ? "on" : "OFF (plaintext email stays; set LEARNIT_SECRET_KEY)"}`);
 
   if (APPLY) {
+    // One at a time on purpose: each handle is checked against the ones already given out.
     for (const doc of pending) await backfillLegacyUser(doc);
     console.log("\nDone.");
   } else if (pending.length > 0) {

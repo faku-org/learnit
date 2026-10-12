@@ -133,7 +133,9 @@ export function createMongoStore(getDb: () => Promise<Pick<Db, "collection">>): 
     async replaceRecoveryCodes(userId, codeHashes) {
       const col = await recovery();
       await col.deleteMany({ userId });
-      for (const codeHash of codeHashes) await col.insertOne({ userId, codeHash, usedAt: null });
+      if (codeHashes.length > 0) {
+        await col.insertMany(codeHashes.map((codeHash) => ({ userId, codeHash, usedAt: null })));
+      }
     },
 
     async consumeRecoveryCode(userId, codeHash, usedAt) {

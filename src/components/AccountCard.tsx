@@ -21,7 +21,7 @@ const errorMessage = (err: unknown, fallback: string) => (err instanceof Error &
 
 export function AccountCard() {
   const { t } = useTranslation();
-  const [user, setUser] = useState<AccountUser | null>(getUser());
+  const [user, setUser] = useState<AccountUser | null>(() => getUser());
   const [secret, setSecret] = useState<{ secret: string; otpauth: string } | null>(null);
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");

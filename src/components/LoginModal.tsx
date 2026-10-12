@@ -45,6 +45,98 @@ function GoogleIcon() {
   );
 }
 
+type FieldName = "handle" | "displayName" | "password" | "code";
+
+function Field({
+  label,
+  hint,
+  ...input
+}: { label: string; hint?: string } & React.ComponentProps<typeof Input>) {
+  return (
+    <label className="block text-xs text-muted-foreground">
+      {label}
+      <Input className="mt-1" {...input} />
+      {hint && <span className="mt-1 block">{hint}</span>}
+    </label>
+  );
+}
+
+function AuthFields({
+  mode,
+  values,
+  onChange,
+}: {
+  mode: Mode;
+  values: Record<FieldName, string>;
+  onChange: Record<FieldName, (value: string) => void>;
+}) {
+  const { t } = useTranslation();
+  const credentials = mode === "login" || mode === "register";
+  const second = mode === "totp" || mode === "recover";
+  return (
+    <>
+      {mode !== "totp" && (
+        <Field
+          label={t("auth.handle")}
+          autoComplete="username"
+          autoCapitalize="none"
+          value={values.handle}
+          onChange={(e) => onChange.handle(e.target.value)}
+          required
+        />
+      )}
+      {mode === "register" && (
+        <Field
+          label={t("auth.displayName")}
+          autoComplete="name"
+          value={values.displayName}
+          onChange={(e) => onChange.displayName(e.target.value)}
+        />
+      )}
+      {credentials && (
+        <Field
+          label={t("auth.password")}
+          hint={mode === "register" ? t("auth.passwordHint") : undefined}
+          type="password"
+          autoComplete={mode === "register" ? "new-password" : "current-password"}
+          value={values.password}
+          onChange={(e) => onChange.password(e.target.value)}
+          required
+        />
+      )}
+      {second && (
+        <Field
+          label={mode === "totp" ? t("auth.totpCode") : t("auth.recoveryCode")}
+          inputMode={mode === "totp" ? "numeric" : "text"}
+          autoComplete="one-time-code"
+          value={values.code}
+          onChange={(e) => onChange.code(e.target.value)}
+          required
+        />
+      )}
+    </>
+  );
+}
+
+function RecoveryCodes({ codes, onDone }: { codes: string[]; onDone: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <div className="space-y-4 text-left">
+      <ul
+        aria-label={t("auth.codesTitle")}
+        className="grid grid-cols-2 gap-2 rounded-lg border border-border bg-secondary p-3 font-mono text-sm text-foreground"
+      >
+        {codes.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+      <Button className="w-full h-11" onClick={onDone}>
+        {t("auth.codesSaved")}
+      </Button>
+    </div>
+  );
+}
+
 export function LoginModal({ onSignedIn }: Props) {
   const { t } = useTranslation();
   const [mode, setMode] = useState<Mode>("login");
@@ -103,27 +195,10 @@ export function LoginModal({ onSignedIn }: Props) {
     setCode("");
   };
 
-  const title =
-    mode === "register"
-      ? t("auth.registerTitle")
-      : mode === "totp"
-        ? t("auth.totpTitle")
-        : mode === "recover"
-          ? t("auth.recoverTitle")
-          : mode === "codes"
-            ? t("auth.codesTitle")
-            : t("auth.signInTitle");
-
-  const body =
-    mode === "register"
-      ? t("auth.registerBody")
-      : mode === "totp"
-        ? t("auth.totpBody")
-        : mode === "recover"
-          ? t("auth.recoverBody")
-          : mode === "codes"
-            ? t("auth.codesBody")
-            : t("auth.signInBody");
+  const copyKey = mode === "login" ? "signIn" : mode;
+  const title = t(`auth.${copyKey}Title`);
+  const body = t(`auth.${copyKey}Body`);
+  const submitLabel = mode === "register" ? t("auth.createAccount") : mode === "login" ? t("auth.signIn") : t("auth.continue");
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-background overflow-y-auto">
@@ -144,74 +219,14 @@ export function LoginModal({ onSignedIn }: Props) {
             <p className="text-sm text-muted-foreground">{body}</p>
 
             {mode === "codes" ? (
-              <div className="space-y-4 text-left">
-                <ul
-                  aria-label={t("auth.codesTitle")}
-                  className="grid grid-cols-2 gap-2 rounded-lg border border-border bg-secondary p-3 font-mono text-sm text-foreground"
-                >
-                  {recoveryCodes.map((item) => (
-                    <li key={item}>{item}</li>
-                  ))}
-                </ul>
-                <Button className="w-full h-11" onClick={() => onSignedIn?.()}>
-                  {t("auth.codesSaved")}
-                </Button>
-              </div>
+              <RecoveryCodes codes={recoveryCodes} onDone={() => onSignedIn?.()} />
             ) : (
               <form onSubmit={submit} className="space-y-3 text-left" noValidate>
-                {mode !== "totp" && (
-                  <label className="block text-xs text-muted-foreground">
-                    {t("auth.handle")}
-                    <Input
-                      className="mt-1"
-                      autoComplete="username"
-                      autoCapitalize="none"
-                      value={handle}
-                      onChange={(e) => setHandle(e.target.value)}
-                      required
-                    />
-                  </label>
-                )}
-                {mode === "register" && (
-                  <label className="block text-xs text-muted-foreground">
-                    {t("auth.displayName")}
-                    <Input
-                      className="mt-1"
-                      autoComplete="name"
-                      value={displayName}
-                      onChange={(e) => setDisplayName(e.target.value)}
-                    />
-                  </label>
-                )}
-                {(mode === "login" || mode === "register") && (
-                  <label className="block text-xs text-muted-foreground">
-                    {t("auth.password")}
-                    <Input
-                      className="mt-1"
-                      type="password"
-                      autoComplete={mode === "register" ? "new-password" : "current-password"}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      required
-                    />
-                    {mode === "register" && (
-                      <span className="mt-1 block">{t("auth.passwordHint")}</span>
-                    )}
-                  </label>
-                )}
-                {(mode === "totp" || mode === "recover") && (
-                  <label className="block text-xs text-muted-foreground">
-                    {mode === "totp" ? t("auth.totpCode") : t("auth.recoveryCode")}
-                    <Input
-                      className="mt-1"
-                      inputMode={mode === "totp" ? "numeric" : "text"}
-                      autoComplete="one-time-code"
-                      value={code}
-                      onChange={(e) => setCode(e.target.value)}
-                      required
-                    />
-                  </label>
-                )}
+                <AuthFields
+                  mode={mode}
+                  values={{ handle, displayName, password, code }}
+                  onChange={{ handle: setHandle, displayName: setDisplayName, password: setPassword, code: setCode }}
+                />
 
                 {error && (
                   <p role="alert" className="text-sm text-destructive">
@@ -220,11 +235,7 @@ export function LoginModal({ onSignedIn }: Props) {
                 )}
 
                 <Button type="submit" className="w-full h-11" disabled={busy}>
-                  {mode === "register"
-                    ? t("auth.createAccount")
-                    : mode === "login"
-                      ? t("auth.signIn")
-                      : t("auth.continue")}
+                  {submitLabel}
                 </Button>
 
                 <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs text-muted-foreground">

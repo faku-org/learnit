@@ -47,11 +47,10 @@ export function forUser(db: Pick<Db, "collection">, userId: string) {
     of,
     /** Every row the user owns, in every user collection. Account deletion is real deletion (ADR 0002). */
     async deleteEverything(): Promise<Record<UserCollection, number>> {
-      const counts = {} as Record<UserCollection, number>;
-      for (const name of USER_COLLECTIONS) {
-        counts[name] = (await of(name).deleteMany()).deletedCount ?? 0;
-      }
-      return counts;
+      const results = await Promise.all(
+        USER_COLLECTIONS.map(async (name) => [name, (await of(name).deleteMany()).deletedCount ?? 0] as const),
+      );
+      return Object.fromEntries(results) as Record<UserCollection, number>;
     },
   };
 }

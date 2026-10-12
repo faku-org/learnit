@@ -124,8 +124,7 @@ export async function backfillLegacyUser(doc: Record<string, unknown>, now = new
   if (typeof doc.handle === "string" && doc.handle) return;
   const email = typeof doc.email === "string" ? doc.email : "";
   const name = typeof doc.name === "string" ? doc.name : "";
-  const emailEnc = await sealEmail(email);
-  const db = await getDB();
+  const [emailEnc, db] = await Promise.all([sealEmail(email), getDB()]);
   await db.collection(COLLECTIONS.users).updateOne(
     { _id: doc._id as ObjectId },
     {

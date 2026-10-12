@@ -67,6 +67,10 @@ export function memCollection() {
       docs.push(stored);
       return { insertedId: stored._id };
     },
+    async insertMany(list: Record<string, unknown>[]): Promise<{ insertedCount: number }> {
+      for (const doc of list) await this.insertOne(doc);
+      return { insertedCount: list.length };
+    },
     async updateOne(
       query: Query,
       update: Update,
