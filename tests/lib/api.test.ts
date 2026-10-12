@@ -41,7 +41,7 @@ import {
   updatePreferences,
   updateStreak,
 } from "@/lib/api";
-import { handlers } from "@tests/handlers";
+import { handlers, testUser } from "@tests/handlers";
 
 const server = setupServer(...handlers);
 
@@ -53,17 +53,17 @@ beforeEach(() => localStorage.clear());
 describe("request", () => {
   test("returns the typed JSON body", async () => {
     const me = await getMe();
-    expect(me).toEqual({ _id: "u1", email: "a@b.c", name: "Anna" });
+    expect(me.user).toEqual(testUser);
   });
 
   test("throws the server's error message on a 4xx", async () => {
-    server.use(http.post("http://localhost:3001/api/goals", () => HttpResponse.json({ error: "name required" }, { status: 400 })));
+    server.use(http.post("http://localhost/api/goals", () => HttpResponse.json({ error: "name required" }, { status: 400 })));
     await expect(createGoal({ language: "german", objective: "x", level: "beginner" })).rejects.toThrow("name required");
   });
 
   test("throws the status text when the error body is not JSON", async () => {
     server.use(
-      http.get("http://localhost:3001/api/goals", () =>
+      http.get("http://localhost/api/goals", () =>
         HttpResponse.text("Bad Gateway", { status: 502 }),
       ),
     );
@@ -72,47 +72,39 @@ describe("request", () => {
 
   test("throws a generic message when the body has no error field", async () => {
     server.use(
-      http.get("http://localhost:3001/api/goals", () => HttpResponse.json({ other: true }, { status: 500 })),
+      http.get("http://localhost/api/goals", () => HttpResponse.json({ other: true }, { status: 500 })),
     );
     await expect(getGoals()).rejects.toThrow("Request failed");
   });
 
   test("surfaces a network failure instead of swallowing it", async () => {
-    server.use(http.get("http://localhost:3001/api/goals", () => HttpResponse.error()));
+    server.use(http.get("http://localhost/api/goals", () => HttpResponse.error()));
     await expect(getGoals()).rejects.toThrow();
   });
 });
 
-describe("auth headers", () => {
-  test("sends a Bearer token when one is stored", async () => {
-    let seen: string | null = null;
+describe("session transport", () => {
+  test("sends the cookie, never an Authorization header", async () => {
+    let authorization: string | null = "unset";
+    let credentials = "";
     server.use(
-      http.get("http://localhost:3001/api/auth/me", ({ request }) => {
-        seen = request.headers.get("authorization");
-        return HttpResponse.json({ _id: "u1" });
+      http.get("http://localhost/api/me", ({ request }) => {
+        authorization = request.headers.get("authorization");
+        credentials = request.credentials;
+        return HttpResponse.json({ user: testUser });
       }),
     );
+    // A token left over from the old flow must not be picked up.
     localStorage.setItem("learnit_token", "tok-1");
     await getMe();
-    expect(seen ?? "").toBe("Bearer tok-1");
-  });
-
-  test("sends no Authorization header when no token is stored", async () => {
-    let seen: string | null = null;
-    server.use(
-      http.get("http://localhost:3001/api/auth/me", ({ request }) => {
-        seen = request.headers.get("authorization");
-        return HttpResponse.json({ _id: "u1" });
-      }),
-    );
-    await getMe();
-    expect(seen).toBeNull();
+    expect(authorization).toBeNull();
+    expect(credentials).toBe("include");
   });
 
   test("always sends a JSON content type", async () => {
     let seen: string | null = null;
     server.use(
-      http.post("http://localhost:3001/api/goals", ({ request }) => {
+      http.post("http://localhost/api/goals", ({ request }) => {
         seen = request.headers.get("content-type");
         return HttpResponse.json({}, { status: 201 });
       }),
@@ -126,7 +118,7 @@ describe("query building", () => {
   test("getNextExercise sets defaults and appends optional params", async () => {
     let url = "";
     server.use(
-      http.get("http://localhost:3001/api/exercises/next", ({ request }) => {
+      http.get("http://localhost/api/exercises/next", ({ request }) => {
         url = request.url;
         return HttpResponse.json({ _id: "e1" });
       }),
@@ -149,19 +141,19 @@ describe("query building", () => {
   test("getExercises omits empty params and renders no query string", async () => {
     let url = "";
     server.use(
-      http.get("http://localhost:3001/api/exercises", ({ request }) => {
+      http.get("http://localhost/api/exercises", ({ request }) => {
         url = request.url;
         return HttpResponse.json({ exercises: [], total: 0 });
       }),
     );
     await getExercises();
-    expect(url).toBe("http://localhost:3001/api/exercises");
+    expect(url).toBe("http://localhost/api/exercises");
   });
 
   test("getExercises encodes each provided filter", async () => {
     let url = "";
     server.use(
-      http.get("http://localhost:3001/api/exercises", ({ request }) => {
+      http.get("http://localhost/api/exercises", ({ request }) => {
         url = request.url;
         return HttpResponse.json({ exercises: [], total: 0 });
       }),
@@ -178,13 +170,13 @@ describe("query building", () => {
   test("getProgress appends an encoded pathId", async () => {
     let url = "";
     server.use(
-      http.get("http://localhost:3001/api/progress", ({ request }) => {
+      http.get("http://localhost/api/progress", ({ request }) => {
         url = request.url;
         return HttpResponse.json({ pathId: "p1", currentModuleIndex: 0, currentTopicIndex: 0, completedTopics: [], topicStats: {} });
       }),
     );
     await getProgress("p 1/x");
-    expect(url).toBe(`http://localhost:3001/api/progress?pathId=${encodeURIComponent("p 1/x")}`);
+    expect(url).toBe(`http://localhost/api/progress?pathId=${encodeURIComponent("p 1/x")}`);
   });
 });
 
@@ -267,7 +259,7 @@ describe("multipart and binary", () => {
     let body: FormData | null = null;
     let contentType: string | null = null;
     server.use(
-      http.post("http://localhost:3001/api/speak/transcribe", async ({ request }) => {
+      http.post("http://localhost/api/speak/transcribe", async ({ request }) => {
         contentType = request.headers.get("content-type");
         body = await request.formData();
         return HttpResponse.json({ transcript: "Hallo" });
@@ -285,7 +277,7 @@ describe("multipart and binary", () => {
     const blob = await synthesizeSpeech("Hallo", "german");
     expect(blob).toBeInstanceOf(Blob);
     server.use(
-      http.post("http://localhost:3001/api/speak/tts", () => HttpResponse.json({ error: "no voice" }, { status: 500 })),
+      http.post("http://localhost/api/speak/tts", () => HttpResponse.json({ error: "no voice" }, { status: 500 })),
     );
     await expect(synthesizeSpeech("Hallo", "german")).rejects.toThrow("no voice");
   });

@@ -10,6 +10,8 @@ function valueMatches(doc: MemDoc, key: string, expected: unknown): boolean {
     if ("$ne" in op) return doc[key] !== op.$ne;
     if ("$gte" in op) return (doc[key] as number) >= (op.$gte as number);
     if ("$lt" in op) return (doc[key] as number) < (op.$lt as number);
+    if ("$lte" in op) return (doc[key] as number) <= (op.$lte as number);
+    if ("$gt" in op) return (doc[key] as number) > (op.$gt as number);
   }
   return doc[key] === expected;
 }
@@ -22,6 +24,7 @@ type Update = {
   $set?: Record<string, unknown>;
   $setOnInsert?: Record<string, unknown>;
   $inc?: Record<string, number>;
+  $unset?: Record<string, unknown>;
 };
 
 const HEX = "0123456789abcdef";
@@ -36,6 +39,7 @@ export function memCollection() {
 
   const applyUpdate = (doc: MemDoc, update: Update): void => {
     if (update.$set) Object.assign(doc, update.$set);
+    if (update.$unset) for (const k of Object.keys(update.$unset)) delete doc[k];
     if (update.$setOnInsert) Object.assign(doc, update.$setOnInsert);
     if (update.$inc) {
       for (const [k, delta] of Object.entries(update.$inc)) {
@@ -105,6 +109,16 @@ export function memCollection() {
       if (idx === -1) return { deletedCount: 0 };
       docs.splice(idx, 1);
       return { deletedCount: 1 };
+    },
+    async deleteMany(query: Query): Promise<{ deletedCount: number }> {
+      let n = 0;
+      for (let i = docs.length - 1; i >= 0; i--) {
+        if (matches(docs[i] as MemDoc, query)) {
+          docs.splice(i, 1);
+          n++;
+        }
+      }
+      return { deletedCount: n };
     },
     async countDocuments(query: Query = {}): Promise<number> {
       return docs.filter((d) => matches(d, query)).length;

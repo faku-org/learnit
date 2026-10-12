@@ -3,6 +3,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { setSession } from "@/lib/auth";
+import { testUser } from "@tests/handlers";
 import { useMsw } from "@tests/msw";
 import "@/lib/i18n";
 import { LearnPage } from "@/components/LearnPage";
@@ -11,7 +12,7 @@ const server = useMsw();
 
 afterEach(() => cleanup());
 beforeEach(() => {
-  setSession("tok", { userId: "u1", email: "a@b.c" });
+  setSession(testUser);
 });
 
 const path = {
@@ -49,12 +50,12 @@ const choiceExercise = {
 describe("LearnPage", () => {
   test("shows the ready state with the roadmap once the path loads", async () => {
     server.use(
-      http.get("http://localhost:3001/api/path/current", () => HttpResponse.json(path)),
-      http.get("http://localhost:3001/api/preferences", () =>
+      http.get("http://localhost/api/path/current", () => HttpResponse.json(path)),
+      http.get("http://localhost/api/preferences", () =>
         HttpResponse.json({ activePathId: "p1", nativeLanguage: "english", difficultyBias: 0 }),
       ),
-      http.get("http://localhost:3001/api/progress", () => HttpResponse.json(progress)),
-      http.get("http://localhost:3001/api/exercises/next", () => HttpResponse.json(choiceExercise)),
+      http.get("http://localhost/api/progress", () => HttpResponse.json(progress)),
+      http.get("http://localhost/api/exercises/next", () => HttpResponse.json(choiceExercise)),
     );
 
     render(<LearnPage />);
@@ -65,16 +66,16 @@ describe("LearnPage", () => {
 
   test("starting an exercise, answering correctly, and submitting shows feedback", async () => {
     server.use(
-      http.get("http://localhost:3001/api/path/current", () => HttpResponse.json(path)),
-      http.get("http://localhost:3001/api/preferences", () =>
+      http.get("http://localhost/api/path/current", () => HttpResponse.json(path)),
+      http.get("http://localhost/api/preferences", () =>
         HttpResponse.json({ activePathId: "p1", nativeLanguage: "english", difficultyBias: 0 }),
       ),
-      http.get("http://localhost:3001/api/progress", () => HttpResponse.json(progress)),
-      http.get("http://localhost:3001/api/exercises/next", () => HttpResponse.json(choiceExercise)),
-      http.post("http://localhost:3001/api/streak/update", () =>
+      http.get("http://localhost/api/progress", () => HttpResponse.json(progress)),
+      http.get("http://localhost/api/exercises/next", () => HttpResponse.json(choiceExercise)),
+      http.post("http://localhost/api/streak/update", () =>
         HttpResponse.json({ currentStreak: 1, longestStreak: 1 }),
       ),
-      http.post("http://localhost:3001/api/exercises/answer", () =>
+      http.post("http://localhost/api/exercises/answer", () =>
         HttpResponse.json({ points: 10, sessionTotals: { total: 1, correct: 1, points: 10, pass: 1 } }),
       ),
     );
@@ -92,13 +93,13 @@ describe("LearnPage", () => {
 
   test("a wrong answer shows the expected answer and does not advance", async () => {
     server.use(
-      http.get("http://localhost:3001/api/path/current", () => HttpResponse.json(path)),
-      http.get("http://localhost:3001/api/preferences", () =>
+      http.get("http://localhost/api/path/current", () => HttpResponse.json(path)),
+      http.get("http://localhost/api/preferences", () =>
         HttpResponse.json({ activePathId: "p1", nativeLanguage: "english", difficultyBias: 0 }),
       ),
-      http.get("http://localhost:3001/api/progress", () => HttpResponse.json(progress)),
-      http.get("http://localhost:3001/api/exercises/next", () => HttpResponse.json(choiceExercise)),
-      http.post("http://localhost:3001/api/exercises/answer", () =>
+      http.get("http://localhost/api/progress", () => HttpResponse.json(progress)),
+      http.get("http://localhost/api/exercises/next", () => HttpResponse.json(choiceExercise)),
+      http.post("http://localhost/api/exercises/answer", () =>
         HttpResponse.json({ points: 0, sessionTotals: { total: 1, correct: 0, points: 0, pass: 0 } }),
       ),
     );
@@ -114,16 +115,16 @@ describe("LearnPage", () => {
 
   test("give up fetches an explanation", async () => {
     server.use(
-      http.get("http://localhost:3001/api/path/current", () => HttpResponse.json(path)),
-      http.get("http://localhost:3001/api/preferences", () =>
+      http.get("http://localhost/api/path/current", () => HttpResponse.json(path)),
+      http.get("http://localhost/api/preferences", () =>
         HttpResponse.json({ activePathId: "p1", nativeLanguage: "english", difficultyBias: 0 }),
       ),
-      http.get("http://localhost:3001/api/progress", () => HttpResponse.json(progress)),
-      http.get("http://localhost:3001/api/exercises/next", () => HttpResponse.json(choiceExercise)),
-      http.post("http://localhost:3001/api/exercises/answer", () =>
+      http.get("http://localhost/api/progress", () => HttpResponse.json(progress)),
+      http.get("http://localhost/api/exercises/next", () => HttpResponse.json(choiceExercise)),
+      http.post("http://localhost/api/exercises/answer", () =>
         HttpResponse.json({ points: 0, sessionTotals: { total: 1, correct: 0, points: 0, pass: 0 } }),
       ),
-      http.post("http://localhost:3001/api/exercises/explain", () =>
+      http.post("http://localhost/api/exercises/explain", () =>
         HttpResponse.json({
           correctAnswer: "Hallo",
           keyPoints: ["It means hello"],

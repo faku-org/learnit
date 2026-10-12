@@ -1,75 +1,69 @@
-import { beforeEach, describe, expect, test } from "bun:test";
-import {
-  clearSession,
-  getAuthHeaders,
-  getToken,
-  getUser,
-  isAuthenticated,
-  setSession,
-} from "@/lib/auth";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
+import { http, HttpResponse } from "msw";
+import { setupServer } from "msw/node";
+import { clearSession, getUser, isAuthenticated, loadSession, setSession } from "@/lib/auth";
+import { handlers, testUser } from "@tests/handlers";
 
-beforeEach(() => localStorage.clear());
+const server = setupServer(...handlers);
+beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
+afterEach(() => server.resetHandlers());
+afterAll(() => server.close());
 
-describe("getToken", () => {
-  test("returns the stored token", () => {
-    localStorage.setItem("learnit_token", "abc123");
-    expect(getToken()).toBe("abc123");
-  });
-
-  test("returns null when nothing is stored", () => {
-    expect(getToken()).toBeNull();
-  });
+beforeEach(() => {
+  clearSession();
+  localStorage.clear();
 });
 
-describe("getUser", () => {
-  test("parses the stored user object", () => {
-    localStorage.setItem("learnit_user", JSON.stringify({ userId: "u1", email: "a@b.c" }));
-    expect(getUser()).toEqual({ userId: "u1", email: "a@b.c" });
-  });
-
-  test("returns null on corrupt JSON", () => {
-    localStorage.setItem("learnit_user", "{not json");
+describe("in-memory session", () => {
+  test("starts empty", () => {
     expect(getUser()).toBeNull();
+    expect(isAuthenticated()).toBe(false);
   });
 
-  test("returns null when nothing is stored", () => {
-    expect(getUser()).toBeNull();
-  });
-});
-
-describe("setSession and clearSession", () => {
-  test("persists token and user", () => {
-    setSession("tok", { userId: "u1", email: "a@b.c" });
-    expect(getToken()).toBe("tok");
-    expect(getUser()).toEqual({ userId: "u1", email: "a@b.c" });
-  });
-
-  test("clearSession removes both keys", () => {
-    setSession("tok", { userId: "u1", email: "a@b.c" });
+  test("setSession and clearSession", () => {
+    setSession(testUser);
+    expect(getUser()).toEqual(testUser);
+    expect(isAuthenticated()).toBe(true);
     clearSession();
-    expect(getToken()).toBeNull();
-    expect(getUser()).toBeNull();
+    expect(isAuthenticated()).toBe(false);
+  });
+
+  test("nothing about the session is written to localStorage", () => {
+    setSession(testUser);
+    expect(localStorage.length).toBe(0);
   });
 });
 
-describe("isAuthenticated", () => {
-  test("true when a token exists", () => {
-    localStorage.setItem("learnit_token", "x");
+describe("loadSession", () => {
+  test("asks the API who the cookie belongs to", async () => {
+    expect(await loadSession()).toEqual(testUser);
     expect(isAuthenticated()).toBe(true);
   });
 
-  test("false when no token exists", () => {
+  test("a 401 means signed out", async () => {
+    server.use(http.get("http://localhost/api/me", () => HttpResponse.json({ error: "Unauthorized" }, { status: 401 })));
+    expect(await loadSession()).toBeNull();
     expect(isAuthenticated()).toBe(false);
   });
-});
 
-describe("getAuthHeaders", () => {
-  test("returns a Bearer header when a token exists", () => {
-    localStorage.setItem("learnit_token", "tok-1");
-    expect(getAuthHeaders()).toEqual({ Authorization: "Bearer tok-1" });
+  test("does not ask twice once it knows", async () => {
+    let calls = 0;
+    server.use(
+      http.get("http://localhost/api/me", () => {
+        calls++;
+        return HttpResponse.json({ user: testUser });
+      }),
+    );
+    await loadSession();
+    await loadSession();
+    expect(calls).toBe(1);
   });
 
-  test("returns an empty object when no token exists", () => {
-    expect(getAuthHeaders()).toEqual({});
+  test("removes the token the old flow left in localStorage", async () => {
+    localStorage.setItem("learnit_token", "stale-jwt");
+    localStorage.setItem("learnit_user", "{}");
+    await loadSession();
+    expect(localStorage.getItem("learnit_token")).toBeNull();
+    expect(localStorage.getItem("learnit_user")).toBeNull();
   });
 });

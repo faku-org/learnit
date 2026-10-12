@@ -1,43 +1,81 @@
-import { getAuthHeaders } from "./auth";
+/**
+ * The API is same-origin: the browser sends the HttpOnly session cookie by itself, nothing is kept in
+ * `localStorage`. In dev the Astro server proxies `/api` to the API (see astro.config.mjs). Resolved against the
+ * page origin so the URL is absolute, which is also what the test runner's fetch needs.
+ */
+export const apiUrl = (path: string): string =>
+  typeof window === "undefined" ? path : new URL(path, window.location.origin).href;
 
-const API = `http://localhost:${import.meta.env.PUBLIC_API_PORT ?? 3001}`;
+async function fail(res: Response): Promise<never> {
+  const error = await res.json().catch(() => ({ error: res.statusText }));
+  throw new Error((error as { error?: string }).error || "Request failed");
+}
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const authHeaders = getAuthHeaders();
-  const res = await fetch(`${API}${path}`, {
+  const res = await fetch(apiUrl(path), {
     ...options,
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
-      ...authHeaders,
       ...(options?.headers as Record<string, string> | undefined),
     },
   });
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error((error as { error?: string }).error || "Request failed");
-  }
+  if (!res.ok) return fail(res);
   return res.json() as Promise<T>;
 }
 
 /** Like `request`, but for multipart bodies — omits the JSON Content-Type so the
  * browser sets its own `multipart/form-data; boundary=...`. */
 async function requestForm<T>(path: string, formData: FormData): Promise<T> {
-  const res = await fetch(`${API}${path}`, {
-    method: "POST",
-    headers: getAuthHeaders(),
-    body: formData,
-  });
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error((error as { error?: string }).error || "Request failed");
-  }
+  const res = await fetch(apiUrl(path), { method: "POST", credentials: "include", body: formData });
+  if (!res.ok) return fail(res);
   return res.json() as Promise<T>;
 }
 
-// ── Auth ──────────────────────────────────────────────────────────────────────
+// ── Account ───────────────────────────────────────────────────────────────────
 
-export const getMe = () =>
-  request<{ _id: string; email: string; name: string; picture?: string }>("/api/auth/me");
+export type AccountUser = {
+  id: string;
+  handle: string;
+  displayName: string;
+  hasPassword: boolean;
+  hasEmail: boolean;
+  totpEnabled: boolean;
+  recoveryCodesLeft: number;
+  createdAt: string;
+};
+
+const post = <T>(path: string, body?: unknown) =>
+  request<T>(path, { method: "POST", body: body === undefined ? undefined : JSON.stringify(body) });
+
+export const getMe = () => request<{ user: AccountUser }>("/api/me");
+
+export const registerAccount = (data: {
+  handle: string;
+  displayName: string;
+  password: string;
+  email?: string;
+}) => post<{ user: AccountUser; recoveryCodes: string[] }>("/api/auth/register", data);
+
+export type LoginResult = { status: "ok"; user: AccountUser } | { status: "totp_required" };
+
+export const loginAccount = (data: { handle: string; password: string }) =>
+  post<LoginResult>("/api/auth/login", data);
+export const verifyTotpCode = (code: string) =>
+  post<{ status: "ok"; user: AccountUser }>("/api/auth/2fa/verify", { code });
+export const recoverAccount = (data: { handle: string; code: string }) =>
+  post<{ status: "ok"; user: AccountUser }>("/api/auth/2fa/recover", data);
+export const logoutAccount = () => post<{ status: "ok" }>("/api/auth/logout");
+
+export const startTotpSetup = () => post<{ secret: string; otpauth: string }>("/api/auth/2fa/setup", {});
+export const confirmTotpSetup = (code: string) =>
+  post<{ status: "ok"; totpEnabled: true }>("/api/auth/2fa/setup", { code });
+export const disableTotp = (password: string) =>
+  post<{ status: "ok"; totpEnabled: false }>("/api/auth/2fa/disable", { password });
+export const regenerateRecoveryCodes = (password: string) =>
+  post<{ recoveryCodes: string[] }>("/api/me/recovery-codes", { password });
+export const deleteAccount = (data: { confirm: string; password?: string }) =>
+  request<{ status: "ok" }>("/api/me", { method: "DELETE", body: JSON.stringify(data) });
 
 // ── Goals ─────────────────────────────────────────────────────────────────────
 
@@ -445,9 +483,10 @@ export const deleteVocabulary = (id: string) =>
 /** Fetches synthesized speech as a playable blob. `language` is the app's
  * language name (e.g. "japanese"), not a BCP-47 code — the backend maps it. */
 export async function synthesizeSpeech(text: string, language: string, voice?: string): Promise<Blob> {
-  const res = await fetch(`${API}/api/speak/tts`, {
+  const res = await fetch(apiUrl("/api/speak/tts"), {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text, language, voice }),
   });
   if (!res.ok) {

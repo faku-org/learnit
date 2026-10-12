@@ -13,7 +13,7 @@ afterEach(() => cleanup());
 // One question per stage; the stage number comes from the request body.
 function stubStages() {
   server.use(
-    http.post("http://localhost:3001/api/calibration/stage", async ({ request }) => {
+    http.post("http://localhost/api/calibration/stage", async ({ request }) => {
       const body = (await request.json()) as { stage?: number };
       const stage = body.stage ?? 1;
       return HttpResponse.json({

@@ -1,50 +1,42 @@
 import { afterEach, beforeEach, describe, expect, test, mock } from "bun:test";
 import { memDb, objectIdHex } from "./memdb";
-import { signJWT } from "../../api/src/auth";
-
-// Replace the real Mongo connection with an in-memory shim before app.ts loads.
-let db: ReturnType<typeof memDb> = memDb();
-mock.module("../../api/src/db", () => ({
-  getDB: async () => db,
-  connectDB: async () => db,
-}));
-
-const { app } = await import("../../api/src/app");
+import { accounts, app, limiter, state } from "./harness";
 
 const base = "http://localhost";
 const get = (path: string, token?: string) =>
-  app.handle(new Request(`${base}${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} }));
+  app.handle(new Request(`${base}${path}`, { headers: token ? { cookie: `learnit_session=${token}` } : {} }));
 const post = (path: string, token: string | undefined, body: unknown) =>
   app.handle(new Request(`${base}${path}`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(token ? { cookie: `learnit_session=${token}` } : {}),
     },
     body: typeof body === "string" ? body : JSON.stringify(body),
   }));
 const put = (path: string, token: string, body: unknown) =>
   app.handle(new Request(`${base}${path}`, {
     method: "PUT",
-    headers: { "content-type": "application/json", Authorization: `Bearer ${token}` },
+    headers: { "content-type": "application/json", cookie: `learnit_session=${token}` },
     body: JSON.stringify(body),
   }));
 const del = (path: string, token: string) =>
-  app.handle(new Request(`${base}${path}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }));
+  app.handle(new Request(`${base}${path}`, { method: "DELETE", headers: { cookie: `learnit_session=${token}` } }));
 
 let token = "";
 let userId = "";
 beforeEach(async () => {
-  db = memDb();
+  state.db = memDb();
   userId = objectIdHex();
-  await db.collection("users").insertOne({
+  limiter.reset();
+  await state.db.collection("users").insertOne({
     _id: userId,
-    email: "a@b.c",
-    name: "Anna",
-    picture: null,
-    createdAt: "2026-08-01",
+    handle: "anna",
+    displayName: "Anna",
+    status: "active",
+    createdAt: "2026-08-01T00:00:00.000Z",
   });
-  token = await signJWT({ userId, email: "a@b.c" });
+  token = (await accounts.startSession(userId)).token;
 });
 afterEach(() => mock.restore());
 
@@ -64,15 +56,24 @@ describe("auth", () => {
     expect(await res.json()).toEqual({ error: "Unauthorized" });
   });
 
-  test("rejects a garbage token", async () => {
-    const res = await get("/api/goals", "not-a-jwt");
+  test("rejects a garbage session", async () => {
+    const res = await get("/api/goals", "not-a-session");
     expect(res.status).toBe(401);
   });
 
-  test("/api/auth/me returns the signed-in user", async () => {
-    const res = await get("/api/auth/me", token);
+  test("a bearer header is not a credential any more", async () => {
+    const res = await app.handle(
+      new Request(`${base}/api/goals`, { headers: { Authorization: `Bearer ${token}` } }),
+    );
+    expect(res.status).toBe(401);
+  });
+
+  test("/api/me returns the signed-in user, without secrets", async () => {
+    const res = await get("/api/me", token);
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ _id: userId, email: "a@b.c", name: "Anna" });
+    const body = (await res.json()) as { user: Record<string, unknown> };
+    expect(body.user).toMatchObject({ id: userId, handle: "anna", displayName: "Anna" });
+    expect(JSON.stringify(body)).not.toContain("passwordHash");
   });
 });
 

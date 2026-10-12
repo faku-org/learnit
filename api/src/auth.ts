@@ -1,10 +1,3 @@
-import { SignJWT, jwtVerify } from "jose";
-
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET ?? "dev-secret-change-in-production",
-);
-const JWT_EXPIRY = "7d";
-
 const googleEnv = () => ({
   clientId: process.env.GOOGLE_CLIENT_ID ?? "",
   clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
@@ -14,29 +7,7 @@ const googleEnv = () => ({
   appUrl: process.env.APP_URL ?? "http://localhost:4321",
 });
 
-export type JWTPayload = {
-  userId: string;
-  email: string;
-};
-
-export async function signJWT(payload: JWTPayload): Promise<string> {
-  return new SignJWT({ ...payload })
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuedAt()
-    .setExpirationTime(JWT_EXPIRY)
-    .sign(JWT_SECRET);
-}
-
-export async function verifyJWT(token: string): Promise<JWTPayload | null> {
-  try {
-    const { payload } = await jwtVerify(token, JWT_SECRET);
-    return { userId: payload.userId as string, email: payload.email as string };
-  } catch {
-    return null;
-  }
-}
-
-export function googleAuthUrl(): string {
+export function googleAuthUrl(state: string): string {
   const { clientId, redirectUri } = googleEnv();
   const params = new URLSearchParams({
     client_id: clientId,
@@ -45,6 +16,7 @@ export function googleAuthUrl(): string {
     scope: "openid email profile",
     access_type: "offline",
     prompt: "select_account",
+    state,
   });
   return `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
 }
@@ -87,14 +59,5 @@ export async function exchangeGoogleCode(code: string): Promise<GoogleUser | nul
   return { googleId: u.id, email: u.email, name: u.name, picture: u.picture };
 }
 
-export function frontendCallbackUrl(jwt: string): string {
-  return `${googleEnv().appUrl}/verify?jwt=${encodeURIComponent(jwt)}`;
-}
-
-export async function extractUserFromHeader(
-  authorization: string | undefined,
-): Promise<JWTPayload | null> {
-  const token = authorization?.startsWith("Bearer ") ? authorization.slice(7) : null;
-  if (!token) return null;
-  return verifyJWT(token);
-}
+/** Where the browser lands after a Google sign-in. The session is already in a cookie: nothing rides the URL. */
+export const appUrl = (path = "/"): string => `${googleEnv().appUrl}${path}`;

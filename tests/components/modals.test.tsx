@@ -23,7 +23,7 @@ describe("FeedbackModal", () => {
   test("submit stays disabled until a rating is chosen, then posts it", async () => {
     let posted: unknown = null;
     server.use(
-      http.post("http://localhost:3001/api/feedback", async ({ request }) => {
+      http.post("http://localhost/api/feedback", async ({ request }) => {
         posted = (await request.json()) as unknown;
         return HttpResponse.json({ ok: true, difficultyBias: 0.1 });
       }),

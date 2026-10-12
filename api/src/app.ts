@@ -47,13 +47,10 @@ import {
   type CalibrationProbeLevel,
   type ModulePerformance,
 } from "./prompts";
-import {
-  signJWT,
-  googleAuthUrl,
-  exchangeGoogleCode,
-  frontendCallbackUrl,
-  extractUserFromHeader,
-} from "./auth";
+import { LIMITS, addressOf, authenticate, limiter } from "./accounts";
+import { ensureAccountIndexes } from "./accounts/mongo-store";
+import { accountRoutes } from "./accounts/routes";
+import { forUser } from "./db/scoped";
 
 // ── SM-2 spaced repetition ────────────────────────────────────────────────────
 
@@ -424,26 +421,28 @@ function topErrorType(errorsByType: Record<string, number>): string | null {
 // ── Auth helper ───────────────────────────────────────────────────────────────
 
 async function requireUser(
-  authorization: string | undefined,
+  headers: Record<string, string | undefined>,
   set: { status: number },
-): Promise<{ userId: string; email: string } | null> {
-  const user = await extractUserFromHeader(authorization);
+): Promise<{ userId: string } | null> {
+  const user = await authenticate(headers);
   if (!user) {
     set.status = 401;
     return null;
   }
-  return user;
+  return { userId: user.id };
 }
 
 // ── App ───────────────────────────────────────────────────────────────────────
 
 export const app = new Elysia()
-  .use(cors({ origin: process.env.APP_URL ?? "http://localhost:4321" }))
+  .use(cors({ origin: process.env.APP_URL ?? "http://localhost:4321", credentials: true }))
   .onStart(async () => {
     const db = await connectDB();
     await seedTaxonomy(db);
     await ensureSourceIndexes(db);
+    await ensureAccountIndexes(db);
   })
+  .use(accountRoutes)
 
   .get("/api/health", () => ({
     status: "ok",
@@ -451,92 +450,21 @@ export const app = new Elysia()
   }))
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // Auth
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  // Redirect browser to Google consent screen
-  .get("/api/auth/google", () => {
-    return new Response(null, {
-      status: 302,
-      headers: { Location: googleAuthUrl() },
-    });
-  })
-
-  // Google redirects here with ?code=...
-  .get("/api/auth/google/callback", async ({ query, set }: any) => {
-    const { code, error } = query as { code?: string; error?: string };
-
-    if (error || !code) {
-      set.status = 400;
-      return new Response(null, {
-        status: 302,
-        headers: { Location: `${process.env.APP_URL ?? "http://localhost:4321"}/?auth_error=denied` },
-      });
-    }
-
-    const googleUser = await exchangeGoogleCode(code);
-    if (!googleUser) {
-      return new Response(null, {
-        status: 302,
-        headers: { Location: `${process.env.APP_URL ?? "http://localhost:4321"}/?auth_error=failed` },
-      });
-    }
-
-    const db = await getDB();
-    let user = await db.collection("users").findOne({ googleId: googleUser.googleId });
-    if (!user) {
-      const result = await db.collection("users").insertOne({
-        googleId: googleUser.googleId,
-        email: googleUser.email,
-        name: googleUser.name,
-        picture: googleUser.picture ?? null,
-        createdAt: new Date().toISOString(),
-        lastLoginAt: new Date().toISOString(),
-      });
-      user = { _id: result.insertedId, ...googleUser };
-    } else {
-      await db.collection("users").updateOne(
-        { googleId: googleUser.googleId },
-        { $set: { lastLoginAt: new Date().toISOString(), picture: googleUser.picture ?? null } },
-      );
-    }
-
-    const jwt = await signJWT({ userId: user._id.toString(), email: googleUser.email });
-    return new Response(null, {
-      status: 302,
-      headers: { Location: frontendCallbackUrl(jwt) },
-    });
-  })
-
-  .get("/api/auth/me", async ({ headers, set }: any) => {
-    const user = await requireUser(headers.authorization, set);
-    if (!user) return { error: "Unauthorized" };
-    const db = await getDB();
-    const doc = await db.collection("users").findOne({ _id: new ObjectId(user.userId) });
-    if (!doc) { set.status = 404; return { error: "Not found" }; }
-    return { _id: doc._id.toString(), email: doc.email, name: doc.name, picture: doc.picture };
-  })
-
-  // ═══════════════════════════════════════════════════════════════════════════
   // Goals (user-scoped)
   // ═══════════════════════════════════════════════════════════════════════════
 
   .get("/api/goals", async ({ headers, set }: any) => {
-    const user = await requireUser(headers.authorization, set);
+    const user = await requireUser(headers, set);
     if (!user) return { error: "Unauthorized" };
-    const db = await getDB();
-    const goals = await db
-      .collection("goals")
-      .find({ userId: user.userId })
-      .sort({ createdAt: -1 })
-      .toArray();
+    const mine = forUser(await getDB(), user.userId);
+    const goals = await mine.of("goals").find().sort({ createdAt: -1 }).toArray();
     return goals.map((g) => ({ ...g, _id: g._id.toString() }));
   })
 
   .post("/api/goals", async ({ body, headers, set }: any) => {
-    const user = await requireUser(headers.authorization, set);
+    const user = await requireUser(headers, set);
     if (!user) return { error: "Unauthorized" };
-    const db = await getDB();
+    const mine = forUser(await getDB(), user.userId);
     const parsed = GoalSchema.safeParse(body);
     if (!parsed.success) {
       set.status = 400;
@@ -548,35 +476,35 @@ export const app = new Elysia()
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    const result = await db.collection("goals").insertOne(goal);
+    const result = await mine.of("goals").insertOne(goal);
     return { _id: result.insertedId.toString(), ...goal };
   })
 
   .put("/api/goals/:id", async ({ params: { id }, body, headers, set }: any) => {
-    const user = await requireUser(headers.authorization, set);
+    const user = await requireUser(headers, set);
     if (!user) return { error: "Unauthorized" };
-    const db = await getDB();
+    const mine = forUser(await getDB(), user.userId);
+    if (!ObjectId.isValid(id)) { set.status = 404; return { error: "Not found" }; }
     const parsed = GoalSchema.partial().safeParse(body);
     if (!parsed.success) {
       set.status = 400;
       return { error: parsed.error.issues };
     }
     const update = { ...parsed.data, updatedAt: new Date().toISOString() };
-    await db
-      .collection("goals")
-      .updateOne({ _id: new ObjectId(id), userId: user.userId }, { $set: update });
-    const updated = await db.collection("goals").findOne({ _id: new ObjectId(id) });
+    const filter = { _id: new ObjectId(id) };
+    await mine.of("goals").updateOne(filter, { $set: update });
+    // Scoped read: a goal that is not the caller's is a 404, never someone else's document.
+    const updated = await mine.of("goals").findOne(filter);
     if (!updated) { set.status = 404; return { error: "Not found" }; }
     return { ...updated, _id: updated._id.toString() };
   })
 
   .delete("/api/goals/:id", async ({ params: { id }, headers, set }: any) => {
-    const user = await requireUser(headers.authorization, set);
+    const user = await requireUser(headers, set);
     if (!user) return { error: "Unauthorized" };
-    const db = await getDB();
-    const result = await db
-      .collection("goals")
-      .deleteOne({ _id: new ObjectId(id), userId: user.userId });
+    const mine = forUser(await getDB(), user.userId);
+    if (!ObjectId.isValid(id)) { set.status = 404; return { error: "Not found" }; }
+    const result = await mine.of("goals").deleteOne({ _id: new ObjectId(id) });
     if (result.deletedCount === 0) { set.status = 404; return { error: "Not found" }; }
     return { success: true };
   })
@@ -586,10 +514,10 @@ export const app = new Elysia()
   // ═══════════════════════════════════════════════════════════════════════════
 
   .get("/api/streak", async ({ headers, set }: any) => {
-    const user = await requireUser(headers.authorization, set);
+    const user = await requireUser(headers, set);
     if (!user) return { error: "Unauthorized" };
-    const db = await getDB();
-    let streak = await db.collection("streak").findOne({ userId: user.userId });
+    const streaks = forUser(await getDB(), user.userId).of("streak");
+    const streak = await streaks.findOne();
     if (!streak) {
       const initial = {
         userId: user.userId,
@@ -597,19 +525,19 @@ export const app = new Elysia()
         longestStreak: 0,
         lastSessionDate: null,
       };
-      await db.collection("streak").insertOne(initial);
+      await streaks.insertOne(initial);
       return initial;
     }
     return { ...streak, _id: streak._id.toString() };
   })
 
   .post("/api/streak/update", async ({ headers, set }: any) => {
-    const user = await requireUser(headers.authorization, set);
+    const user = await requireUser(headers, set);
     if (!user) return { error: "Unauthorized" };
-    const db = await getDB();
+    const streaks = forUser(await getDB(), user.userId).of("streak");
     const today = new Date().toISOString().split("T")[0];
     const yesterday = new Date(Date.now() - 86400000).toISOString().split("T")[0];
-    let streak = await db.collection("streak").findOne({ userId: user.userId });
+    const streak = await streaks.findOne();
     if (!streak) {
       const initial = {
         userId: user.userId,
@@ -617,7 +545,7 @@ export const app = new Elysia()
         longestStreak: 1,
         lastSessionDate: today,
       };
-      await db.collection("streak").insertOne(initial);
+      await streaks.insertOne(initial);
       return initial;
     }
     if (streak.lastSessionDate === today)
@@ -629,7 +557,7 @@ export const app = new Elysia()
       longestStreak: Math.max(streak.longestStreak, newStreak),
       lastSessionDate: today,
     };
-    await db.collection("streak").updateOne({ userId: user.userId }, { $set: updated });
+    await streaks.updateOne({}, { $set: updated });
     return updated;
   })
 
@@ -638,39 +566,38 @@ export const app = new Elysia()
   // ═══════════════════════════════════════════════════════════════════════════
 
   .get("/api/vocabulary", async ({ headers, set }: any) => {
-    const user = await requireUser(headers.authorization, set);
+    const user = await requireUser(headers, set);
     if (!user) return { error: "Unauthorized" };
-    const db = await getDB();
-    const words = await db
-      .collection("vocabulary")
-      .find({ userId: user.userId })
+    const words = await forUser(await getDB(), user.userId)
+      .of("vocabulary")
+      .find()
       .sort({ createdAt: -1 })
       .toArray();
     return words.map((w) => ({ ...w, _id: w._id.toString() }));
   })
 
   .post("/api/vocabulary", async ({ body, headers, set }: any) => {
-    const user = await requireUser(headers.authorization, set);
+    const user = await requireUser(headers, set);
     if (!user) return { error: "Unauthorized" };
-    const db = await getDB();
     const parsed = VocabularySchema.safeParse(body);
     if (!parsed.success) {
       set.status = 400;
       return { error: parsed.error.issues };
     }
     const entry = { ...parsed.data, userId: user.userId, createdAt: new Date().toISOString() };
-    const result = await db.collection("vocabulary").insertOne(entry);
+    const result = await forUser(await getDB(), user.userId).of("vocabulary").insertOne(entry);
     return { _id: result.insertedId.toString(), ...entry };
   })
 
   .post("/api/vocabulary/:id/enrich", async ({ params: { id }, body, headers, set }: any) => {
-    const user = await requireUser(headers.authorization, set);
+    const user = await requireUser(headers, set);
     if (!user) return { error: "Unauthorized" };
     const { word, meaning, language, nativeLanguage = "english" } = body;
     if (!word || !language) {
       set.status = 400;
       return { error: "word and language are required" };
     }
+    if (!ObjectId.isValid(id)) { set.status = 404; return { error: "Not found" }; }
     try {
       const enrichment = await generateJSON<{
         type: string;
@@ -682,10 +609,9 @@ export const app = new Elysia()
         buildVocabEnrichPrompt(word, meaning ?? "", language, nativeLanguage),
         { temperature: 0.3, maxTokens: 1024, model: FLASH_MODEL },
       );
-      const db = await getDB();
-      await db
-        .collection("vocabulary")
-        .updateOne({ _id: new ObjectId(id), userId: user.userId }, { $set: enrichment });
+      await forUser(await getDB(), user.userId)
+        .of("vocabulary")
+        .updateOne({ _id: new ObjectId(id) }, { $set: enrichment });
       return enrichment;
     } catch (err) {
       set.status = 500;
@@ -694,12 +620,12 @@ export const app = new Elysia()
   })
 
   .delete("/api/vocabulary/:id", async ({ params: { id }, headers, set }: any) => {
-    const user = await requireUser(headers.authorization, set);
+    const user = await requireUser(headers, set);
     if (!user) return { error: "Unauthorized" };
-    const db = await getDB();
-    const result = await db
-      .collection("vocabulary")
-      .deleteOne({ _id: new ObjectId(id), userId: user.userId });
+    if (!ObjectId.isValid(id)) { set.status = 404; return { error: "Not found" }; }
+    const result = await forUser(await getDB(), user.userId)
+      .of("vocabulary")
+      .deleteOne({ _id: new ObjectId(id) });
     if (result.deletedCount === 0) { set.status = 404; return { error: "Not found" }; }
     return { success: true };
   })
@@ -711,7 +637,7 @@ export const app = new Elysia()
   // One stage of the adaptive placement test. The client drives the difficulty
   // ladder and calls this repeatedly with an updated probeLevel.
   .post("/api/calibration/stage", async ({ body, headers, set }: any) => {
-    const user = await requireUser(headers.authorization, set);
+    const user = await requireUser(headers, set);
     if (!user) return { error: "Unauthorized" };
     const {
       subject: subjectInput,
@@ -787,7 +713,7 @@ export const app = new Elysia()
   // enough for a long path in one call), then module 1's topics are filled in.
   // Later modules are filled in on demand from real performance.
   .post("/api/path/generate", async ({ body, headers, set }: any) => {
-    const user = await requireUser(headers.authorization, set);
+    const user = await requireUser(headers, set);
     if (!user) return { error: "Unauthorized" };
     const {
       // `language` is the pre-taxonomy field name, still accepted so an older
@@ -889,7 +815,7 @@ export const app = new Elysia()
   // Place a subject in the tree. Returns a breadcrumb the user can correct
   // before committing to generation.
   .post("/api/taxonomy/classify", async ({ body, headers, set }: any) => {
-    const user = await requireUser(headers.authorization, set);
+    const user = await requireUser(headers, set);
     if (!user) return { error: "Unauthorized" };
     const { subject, objective = "" } = body as { subject?: string; objective?: string };
     if (!subject) {
@@ -903,7 +829,7 @@ export const app = new Elysia()
   // Judge whether a goal is narrow enough to plan. Non-blocking: a `workable`
   // verdict is returned when the check itself fails.
   .post("/api/taxonomy/scope", async ({ body, headers, set }: any) => {
-    const user = await requireUser(headers.authorization, set);
+    const user = await requireUser(headers, set);
     if (!user) return { error: "Unauthorized" };
     const { subject, objective } = body as { subject?: string; objective?: string };
     if (!subject || !objective) {
@@ -916,7 +842,7 @@ export const app = new Elysia()
 
   // The whole tree, for the breadcrumb picker.
   .get("/api/taxonomy/tree", async ({ headers, set }: any) => {
-    const user = await requireUser(headers.authorization, set);
+    const user = await requireUser(headers, set);
     if (!user) return { error: "Unauthorized" };
     const db = await getDB();
     const nodes = await allNodes(db);
@@ -934,7 +860,7 @@ export const app = new Elysia()
   // Fill in the topics of one outlined module, adapting to performance so far.
   // Idempotent: an already-hydrated module is returned untouched.
   .post("/api/path/:id/module/:order/topics", async ({ params, headers, set }: any) => {
-    const user = await requireUser(headers.authorization, set);
+    const user = await requireUser(headers, set);
     if (!user) return { error: "Unauthorized" };
     const order = Number(params.order);
     if (!Number.isInteger(order) || order < 1) {
@@ -986,7 +912,7 @@ export const app = new Elysia()
   })
 
   .get("/api/path/current", async ({ headers, set }: any) => {
-    const user = await requireUser(headers.authorization, set);
+    const user = await requireUser(headers, set);
     if (!user) return { error: "Unauthorized" };
     const db = await getDB();
     const prefs = await db.collection("preferences").findOne({ userId: user.userId });
@@ -1011,7 +937,7 @@ export const app = new Elysia()
   })
 
   .get("/api/paths", async ({ headers, set }: any) => {
-    const user = await requireUser(headers.authorization, set);
+    const user = await requireUser(headers, set);
     if (!user) return { error: "Unauthorized" };
     const db = await getDB();
     const prefs = await db.collection("preferences").findOne({ userId: user.userId });
@@ -1029,7 +955,7 @@ export const app = new Elysia()
   })
 
   .delete("/api/path/:id", async ({ params: { id }, headers, set }: any) => {
-    const user = await requireUser(headers.authorization, set);
+    const user = await requireUser(headers, set);
     if (!user) return { error: "Unauthorized" };
     const db = await getDB();
     const result = await db
@@ -1050,7 +976,7 @@ export const app = new Elysia()
   // ═══════════════════════════════════════════════════════════════════════════
 
   .get("/api/preferences", async ({ headers, set }: any) => {
-    const user = await requireUser(headers.authorization, set);
+    const user = await requireUser(headers, set);
     if (!user) return { error: "Unauthorized" };
     const db = await getDB();
     const prefs = await db.collection("preferences").findOne({ userId: user.userId });
@@ -1062,7 +988,7 @@ export const app = new Elysia()
   })
 
   .post("/api/preferences", async ({ body, headers, set }: any) => {
-    const user = await requireUser(headers.authorization, set);
+    const user = await requireUser(headers, set);
     if (!user) return { error: "Unauthorized" };
     const { activePathId, nativeLanguage, difficultyBias } = body as {
       activePathId?: string | null;
@@ -1094,7 +1020,7 @@ export const app = new Elysia()
   // ═══════════════════════════════════════════════════════════════════════════
 
   .get("/api/exercises", async ({ query, headers, set }: any) => {
-    const user = await requireUser(headers.authorization, set);
+    const user = await requireUser(headers, set);
     if (!user) return { error: "Unauthorized" };
     const {
       topic, language, subject, taxonomyLeaf, type, q,
@@ -1134,7 +1060,7 @@ export const app = new Elysia()
 
   // Direct generate (admin/dev use, bypasses SRS)
   .post("/api/exercises/generate", async ({ body, headers, set }: any) => {
-    const user = await requireUser(headers.authorization, set);
+    const user = await requireUser(headers, set);
     if (!user) return { error: "Unauthorized" };
     const {
       subject: subjectInput, language, taxonomyLeaf, bankKey: bankKeyInput,
@@ -1200,7 +1126,7 @@ export const app = new Elysia()
   // ── Smart SRS exercise selection ──────────────────────────────────────────
 
   .get("/api/exercises/next", async ({ query, headers, set }: any) => {
-    const user = await requireUser(headers.authorization, set);
+    const user = await requireUser(headers, set);
     if (!user) return { error: "Unauthorized" };
 
     const {
@@ -1385,7 +1311,7 @@ export const app = new Elysia()
   // ── Record answer + SM-2 update ───────────────────────────────────────────
 
   .post("/api/exercises/answer", async ({ body, headers, set }: any) => {
-    const user = await requireUser(headers.authorization, set);
+    const user = await requireUser(headers, set);
     if (!user) return { error: "Unauthorized" };
 
     const {
@@ -1562,7 +1488,7 @@ export const app = new Elysia()
   // ═══════════════════════════════════════════════════════════════════════════
 
   .post("/api/grade/semantic", async ({ body, headers, set }: any) => {
-    const user = await requireUser(headers.authorization, set);
+    const user = await requireUser(headers, set);
     if (!user) return { error: "Unauthorized" };
 
     const {
@@ -1595,7 +1521,7 @@ export const app = new Elysia()
   // ═══════════════════════════════════════════════════════════════════════════
 
   .post("/api/exercises/explain", async ({ body, headers, set }: any) => {
-    const user = await requireUser(headers.authorization, set);
+    const user = await requireUser(headers, set);
     if (!user) return { error: "Unauthorized" };
     const { exercise, nativeLanguage = "english" } = body;
     if (!exercise) {
@@ -1625,7 +1551,7 @@ export const app = new Elysia()
   // ═══════════════════════════════════════════════════════════════════════════
 
   .post("/api/feedback", async ({ body, headers, set }: any) => {
-    const user = await requireUser(headers.authorization, set);
+    const user = await requireUser(headers, set);
     if (!user) return { error: "Unauthorized" };
 
     const { rating, exerciseCount } = body as {
@@ -1666,7 +1592,7 @@ export const app = new Elysia()
   // ═══════════════════════════════════════════════════════════════════════════
 
   .post("/api/translate", async ({ body, headers, set }: any) => {
-    const user = await requireUser(headers.authorization, set);
+    const user = await requireUser(headers, set);
     if (!user) return { error: "Unauthorized" };
     const { text, targetLanguage = "english" } = body;
     if (!text) {
@@ -1694,7 +1620,7 @@ ${text}`,
   // ═══════════════════════════════════════════════════════════════════════════
 
   .post("/api/correct", async ({ body, headers, set }: any) => {
-    const user = await requireUser(headers.authorization, set);
+    const user = await requireUser(headers, set);
     if (!user) return { error: "Unauthorized" };
     const { text, language, context = "", nativeLanguage = "english" } = body;
     if (!text || !language) {
@@ -1728,7 +1654,7 @@ Return JSON with all explanations and feedback written in ${nativeLanguage}:
   // ═══════════════════════════════════════════════════════════════════════════
 
   .get("/api/progress", async ({ query, headers, set }: any) => {
-    const user = await requireUser(headers.authorization, set);
+    const user = await requireUser(headers, set);
     if (!user) return { error: "Unauthorized" };
     const { pathId } = query as { pathId?: string };
     const db = await getDB();
@@ -1746,7 +1672,7 @@ Return JSON with all explanations and feedback written in ${nativeLanguage}:
   })
 
   .post("/api/progress", async ({ body, headers, set }: any) => {
-    const user = await requireUser(headers.authorization, set);
+    const user = await requireUser(headers, set);
     if (!user) return { error: "Unauthorized" };
     const {
       pathId, currentModuleIndex, currentTopicIndex, completedTopics, topicStats,
@@ -1778,7 +1704,7 @@ Return JSON with all explanations and feedback written in ${nativeLanguage}:
   // ── Close a topic (lesson) and return its report card ─────────────────────
 
   .post("/api/stats/topic/complete", async ({ body, headers, set }: any) => {
-    const user = await requireUser(headers.authorization, set);
+    const user = await requireUser(headers, set);
     if (!user) return { error: "Unauthorized" };
 
     const { pathId = null, moduleIndex, topicIndex } = body as {
@@ -1840,7 +1766,7 @@ Return JSON with all explanations and feedback written in ${nativeLanguage}:
   // ── Close a module (section) and return its report card ───────────────────
 
   .post("/api/stats/module/complete", async ({ body, headers, set }: any) => {
-    const user = await requireUser(headers.authorization, set);
+    const user = await requireUser(headers, set);
     if (!user) return { error: "Unauthorized" };
 
     const { pathId = null, moduleIndex } = body as {
@@ -1913,7 +1839,7 @@ Return JSON with all explanations and feedback written in ${nativeLanguage}:
   // ── Dashboard overview ────────────────────────────────────────────────────
 
   .get("/api/stats/overview", async ({ query, headers, set }: any) => {
-    const user = await requireUser(headers.authorization, set);
+    const user = await requireUser(headers, set);
     if (!user) return { error: "Unauthorized" };
 
     const { pathId } = query as { pathId?: string };
@@ -2086,7 +2012,13 @@ Return JSON with all explanations and feedback written in ${nativeLanguage}:
   // Text-to-Speech (public — no auth needed for audio playback)
   // ═══════════════════════════════════════════════════════════════════════════
 
-  .get("/api/tts", async ({ query, set }: any) => {
+  .get("/api/tts", async ({ query, set, request, server }: any) => {
+    const allowance = limiter.take(`tts:${addressOf(request, server)}`, LIMITS.tts);
+    if (!allowance.ok) {
+      set.status = 429;
+      set.headers["retry-after"] = String(allowance.retryAfter);
+      return { error: "rate limit exceeded", code: "rate_limited" };
+    }
     const { text, lang = "en" } = query as { text?: string; lang?: string };
     if (!text?.trim()) {
       set.status = 400;
@@ -2122,7 +2054,7 @@ Return JSON with all explanations and feedback written in ${nativeLanguage}:
   // ═══════════════════════════════════════════════════════════════════════════
 
   .post("/api/speak/tts", async ({ body, headers, set }: any) => {
-    const user = await requireUser(headers.authorization, set);
+    const user = await requireUser(headers, set);
     if (!user) return { error: "Unauthorized" };
     const { text, language, voice } = body as { text?: string; language?: string; voice?: string };
     if (!text?.trim() || !language) {
@@ -2139,7 +2071,7 @@ Return JSON with all explanations and feedback written in ${nativeLanguage}:
   })
 
   .post("/api/speak/transcribe", async ({ body, headers, set }: any) => {
-    const user = await requireUser(headers.authorization, set);
+    const user = await requireUser(headers, set);
     if (!user) return { error: "Unauthorized" };
     const { audio, language } = body as { audio?: File; language?: string };
     if (!audio || audio.size === 0) {
@@ -2158,7 +2090,7 @@ Return JSON with all explanations and feedback written in ${nativeLanguage}:
   // Mints a short-lived client secret so the browser can open the Speech-to-
   // Speech WebSocket directly without ever seeing XAI_API_KEY.
   .post("/api/speak/realtime-token", async ({ headers, set }: any) => {
-    const user = await requireUser(headers.authorization, set);
+    const user = await requireUser(headers, set);
     if (!user) return { error: "Unauthorized" };
     try {
       return await createRealtimeTokenXai();
@@ -2169,7 +2101,7 @@ Return JSON with all explanations and feedback written in ${nativeLanguage}:
   })
 
   .post("/api/speak/scenario", async ({ body, headers, set }: any) => {
-    const user = await requireUser(headers.authorization, set);
+    const user = await requireUser(headers, set);
     if (!user) return { error: "Unauthorized" };
     const { language, level = "beginner", topic = "everyday conversation", nativeLanguage = "english" } = body;
     if (!language) {
@@ -2194,7 +2126,7 @@ Return JSON with all explanations and feedback written in ${nativeLanguage}:
   })
 
   .post("/api/speak/grade", async ({ body, headers, set }: any) => {
-    const user = await requireUser(headers.authorization, set);
+    const user = await requireUser(headers, set);
     if (!user) return { error: "Unauthorized" };
     const {
       language, situation, prompt, transcript, nativeLanguage = "english",

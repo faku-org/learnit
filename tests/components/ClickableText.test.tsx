@@ -29,7 +29,7 @@ describe("ClickableText", () => {
 
   test("clicking an unknown word offers a translation that fetches", async () => {
     server.use(
-      http.post("http://localhost:3001/api/translate", () =>
+      http.post("http://localhost/api/translate", () =>
         HttpResponse.json({ translation: "grande" }),
       ),
     );

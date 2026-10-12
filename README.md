@@ -31,6 +31,9 @@ AI-powered language learning app. Practice with generated exercises, build vocab
 
 ### Install
 
+`@wefaber/accounts` comes from GitHub Packages: export a token with `read:packages` first
+(`gh auth refresh -s read:packages`, then `export NPM_TOKEN=$(gh auth token)`).
+
 ```bash
 bun install
 cd api && bun install
@@ -40,8 +43,11 @@ cd api && bun install
 
 ```bash
 cp api/.env.example api/.env
-# Edit api/.env — set DEEPSEEK_API_KEY at minimum
+# Edit api/.env — set DEEPSEEK_API_KEY at minimum.
+# For email and two-step sign-in also set LEARNIT_SECRET_KEY (openssl rand -hex 32).
 ```
+
+Accounts, sessions and isolation: see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ### Run
 

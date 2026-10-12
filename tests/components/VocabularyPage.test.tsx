@@ -3,6 +3,7 @@ import { cleanup, render, screen, waitFor, within } from "@testing-library/react
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { setSession } from "@/lib/auth";
+import { testUser } from "@tests/handlers";
 import { useMsw } from "@tests/msw";
 import "@/lib/i18n";
 import { VocabularyPage } from "@/components/VocabularyPage";
@@ -11,7 +12,7 @@ const server = useMsw();
 
 afterEach(() => cleanup());
 beforeEach(() => {
-  setSession("tok", { userId: "u1", email: "a@b.c" });
+  setSession(testUser);
 });
 
 const entries = [
@@ -35,9 +36,9 @@ const entries = [
 
 function seedLoad() {
   server.use(
-    http.get("http://localhost:3001/api/vocabulary", () => HttpResponse.json(entries)),
-    http.get("http://localhost:3001/api/path/current", () => HttpResponse.json({ _id: "p1", language: "German" })),
-    http.get("http://localhost:3001/api/preferences", () =>
+    http.get("http://localhost/api/vocabulary", () => HttpResponse.json(entries)),
+    http.get("http://localhost/api/path/current", () => HttpResponse.json({ _id: "p1", language: "German" })),
+    http.get("http://localhost/api/preferences", () =>
       HttpResponse.json({ activePathId: "p1", nativeLanguage: "english", difficultyBias: 0 }),
     ),
   );
@@ -46,9 +47,9 @@ function seedLoad() {
 describe("VocabularyPage", () => {
   test("shows the empty state when there are no words", async () => {
     server.use(
-      http.get("http://localhost:3001/api/vocabulary", () => HttpResponse.json([])),
-      http.get("http://localhost:3001/api/path/current", () => HttpResponse.json(null)),
-      http.get("http://localhost:3001/api/preferences", () =>
+      http.get("http://localhost/api/vocabulary", () => HttpResponse.json([])),
+      http.get("http://localhost/api/path/current", () => HttpResponse.json(null)),
+      http.get("http://localhost/api/preferences", () =>
         HttpResponse.json({ activePathId: null, nativeLanguage: "english", difficultyBias: 0 }),
       ),
     );
@@ -71,10 +72,10 @@ describe("VocabularyPage", () => {
   test("adds a word and persists it to the list", async () => {
     seedLoad();
     server.use(
-      http.post("http://localhost:3001/api/vocabulary", () =>
+      http.post("http://localhost/api/vocabulary", () =>
         HttpResponse.json({ _id: "v3", word: "Apfel", meaning: "apple", language: "German", createdAt: "2026-08-01" }, { status: 201 }),
       ),
-      http.post("http://localhost:3001/api/vocabulary/:id/enrich", () =>
+      http.post("http://localhost/api/vocabulary/:id/enrich", () =>
         HttpResponse.json({ type: "noun", conjugations: [], example: "der Apfel", exampleTranslation: "the apple" }),
       ),
     );
@@ -93,7 +94,7 @@ describe("VocabularyPage", () => {
   test("deletes a word", async () => {
     seedLoad();
     server.use(
-      http.delete("http://localhost:3001/api/vocabulary/:id", () => HttpResponse.json({ ok: true })),
+      http.delete("http://localhost/api/vocabulary/:id", () => HttpResponse.json({ ok: true })),
     );
     const user = userEvent.setup();
     render(<VocabularyPage />);
@@ -108,7 +109,7 @@ describe("VocabularyPage", () => {
   test("re-enriching an entry merges the enrichment", async () => {
     seedLoad();
     server.use(
-      http.post("http://localhost:3001/api/vocabulary/:id/enrich", () =>
+      http.post("http://localhost/api/vocabulary/:id/enrich", () =>
         HttpResponse.json({ type: "verb", conjugations: [], example: "ich laufe", exampleTranslation: "I run" }),
       ),
     );

@@ -661,6 +661,8 @@ Concepts are emitted by the topic generator: each topic gains `concepts: string[
 
 ### 8.2 Mastery snapshots, the EVOLUCIONA_DE spine
 
+> Account deletion removes a user's snapshots with the rest of their rows: see [ADR 0002](adr/0002-account-deletion.md). Append-only holds while the account exists.
+
 ```ts
 // mastery_snapshots  -- APPEND ONLY. Never update, never delete.
 {

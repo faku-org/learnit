@@ -3,6 +3,7 @@ import { cleanup, render, screen, waitFor, within } from "@testing-library/react
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { setSession } from "@/lib/auth";
+import { testUser } from "@tests/handlers";
 import { useMsw } from "@tests/msw";
 import "@/lib/i18n";
 import { SettingsPage } from "@/components/SettingsPage";
@@ -11,7 +12,7 @@ const server = useMsw();
 
 afterEach(() => cleanup());
 beforeEach(() => {
-  setSession("tok", { userId: "u1", email: "a@b.c" });
+  setSession(testUser);
 });
 
 const paths = [
@@ -37,8 +38,8 @@ const paths = [
 
 function seedLoad() {
   server.use(
-    http.get("http://localhost:3001/api/paths", () => HttpResponse.json(paths)),
-    http.get("http://localhost:3001/api/preferences", () =>
+    http.get("http://localhost/api/paths", () => HttpResponse.json(paths)),
+    http.get("http://localhost/api/preferences", () =>
       HttpResponse.json({ activePathId: "p1", nativeLanguage: "english", difficultyBias: 0 }),
     ),
   );
@@ -55,8 +56,8 @@ describe("SettingsPage", () => {
 
   test("shows the empty state when there are no paths", async () => {
     server.use(
-      http.get("http://localhost:3001/api/paths", () => HttpResponse.json([])),
-      http.get("http://localhost:3001/api/preferences", () =>
+      http.get("http://localhost/api/paths", () => HttpResponse.json([])),
+      http.get("http://localhost/api/preferences", () =>
         HttpResponse.json({ activePathId: null, nativeLanguage: "english", difficultyBias: 0 }),
       ),
     );
@@ -68,7 +69,7 @@ describe("SettingsPage", () => {
     seedLoad();
     let activeSet: unknown = null;
     server.use(
-      http.post("http://localhost:3001/api/preferences", async ({ request }) => {
+      http.post("http://localhost/api/preferences", async ({ request }) => {
         activeSet = (await request.json()) as unknown;
         return HttpResponse.json({ activePathId: "p2", nativeLanguage: "english", difficultyBias: 0 });
       }),
@@ -87,7 +88,7 @@ describe("SettingsPage", () => {
     seedLoad();
     let langSet: unknown = null;
     server.use(
-      http.post("http://localhost:3001/api/preferences", async ({ request }) => {
+      http.post("http://localhost/api/preferences", async ({ request }) => {
         langSet = (await request.json()) as unknown;
         return HttpResponse.json({ activePathId: "p1", nativeLanguage: "spanish", difficultyBias: 0 });
       }),
@@ -103,7 +104,7 @@ describe("SettingsPage", () => {
 
   test("deleting a path removes it and clears the active id", async () => {
     seedLoad();
-    server.use(http.delete("http://localhost:3001/api/path/:id", () => HttpResponse.json({ ok: true })));
+    server.use(http.delete("http://localhost/api/path/:id", () => HttpResponse.json({ ok: true })));
     const user = userEvent.setup();
     render(<SettingsPage />);
     await screen.findByText("German");

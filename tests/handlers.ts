@@ -1,11 +1,20 @@
 import { http, HttpResponse } from "msw";
 
-const base = "http://localhost:3001";
+const base = "http://localhost";
+
+export const testUser = {
+  id: "u1",
+  handle: "anna",
+  displayName: "Anna",
+  hasPassword: true,
+  hasEmail: false,
+  totpEnabled: false,
+  recoveryCodesLeft: 8,
+  createdAt: "2026-08-01T00:00:00.000Z",
+};
 
 export const handlers = [
-  http.get(`${base}/api/auth/me`, () =>
-    HttpResponse.json({ _id: "u1", email: "a@b.c", name: "Anna" }),
-  ),
+  http.get(`${base}/api/me`, () => HttpResponse.json({ user: testUser })),
   http.get(`${base}/api/goals`, () => HttpResponse.json([{ id: "g1", language: "german" }])),
   http.post(`${base}/api/goals`, () => HttpResponse.json({ id: "g2" }, { status: 201 })),
   http.get(`${base}/api/streak`, () =>

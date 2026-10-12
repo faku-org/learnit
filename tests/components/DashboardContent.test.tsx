@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { cleanup, render, screen } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
 import { setSession } from "@/lib/auth";
+import { testUser } from "@tests/handlers";
 import { useMsw } from "@tests/msw";
 import "@/lib/i18n";
 import { DashboardContent } from "@/components/DashboardContent";
@@ -10,7 +11,7 @@ const server = useMsw();
 
 afterEach(() => cleanup());
 beforeEach(() => {
-  setSession("tok", { userId: "u1", email: "a@b.c" });
+  setSession(testUser);
 });
 
 const overview = {
@@ -30,13 +31,13 @@ const overview = {
 describe("DashboardContent", () => {
   test("renders the streak, today card, and stats", async () => {
     server.use(
-      http.get("http://localhost:3001/api/streak", () =>
+      http.get("http://localhost/api/streak", () =>
         HttpResponse.json({ currentStreak: 4, longestStreak: 9, lastSessionDate: "2026-08-03" }),
       ),
-      http.get("http://localhost:3001/api/path/current", () =>
+      http.get("http://localhost/api/path/current", () =>
         HttpResponse.json({ subject: "German", objective: "Talk to locals", modules: [{ name: "Basics", description: "Start", order: 0 }] }),
       ),
-      http.get("http://localhost:3001/api/stats/overview", () => HttpResponse.json(overview)),
+      http.get("http://localhost/api/stats/overview", () => HttpResponse.json(overview)),
     );
     render(<DashboardContent />);
 
@@ -48,11 +49,11 @@ describe("DashboardContent", () => {
 
   test("shows the welcome state when there is no path or streak", async () => {
     server.use(
-      http.get("http://localhost:3001/api/streak", () =>
+      http.get("http://localhost/api/streak", () =>
         HttpResponse.json({ currentStreak: 0, longestStreak: 0, lastSessionDate: null }),
       ),
-      http.get("http://localhost:3001/api/path/current", () => HttpResponse.json(null)),
-      http.get("http://localhost:3001/api/stats/overview", () => HttpResponse.json({ ...overview, totalAnswered: 0, recommendations: [] })),
+      http.get("http://localhost/api/path/current", () => HttpResponse.json(null)),
+      http.get("http://localhost/api/stats/overview", () => HttpResponse.json({ ...overview, totalAnswered: 0, recommendations: [] })),
     );
     render(<DashboardContent />);
 
@@ -63,13 +64,13 @@ describe("DashboardContent", () => {
 
   test("links to learn when a path exists", async () => {
     server.use(
-      http.get("http://localhost:3001/api/streak", () =>
+      http.get("http://localhost/api/streak", () =>
         HttpResponse.json({ currentStreak: 1, longestStreak: 2, lastSessionDate: "2026-08-03" }),
       ),
-      http.get("http://localhost:3001/api/path/current", () =>
+      http.get("http://localhost/api/path/current", () =>
         HttpResponse.json({ subject: "German", objective: "Talk to locals", modules: [] }),
       ),
-      http.get("http://localhost:3001/api/stats/overview", () => HttpResponse.json({ ...overview, totalAnswered: 0, recommendations: [] })),
+      http.get("http://localhost/api/stats/overview", () => HttpResponse.json({ ...overview, totalAnswered: 0, recommendations: [] })),
     );
     render(<DashboardContent />);
     expect(await screen.findByRole("link", { name: /Continue/ })).toBeInTheDocument();

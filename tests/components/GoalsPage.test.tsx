@@ -3,6 +3,7 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { setSession } from "@/lib/auth";
+import { testUser } from "@tests/handlers";
 import { useMsw } from "@tests/msw";
 import "@/lib/i18n";
 import { GoalsPage } from "@/components/GoalsPage";
@@ -11,7 +12,7 @@ const server = useMsw();
 
 afterEach(() => cleanup());
 beforeEach(() => {
-  setSession("tok", { userId: "u1", email: "a@b.c" });
+  setSession(testUser);
 });
 
 const paths = [
@@ -33,8 +34,8 @@ const paths = [
 
 function seedLoad() {
   server.use(
-    http.get("http://localhost:3001/api/paths", () => HttpResponse.json(paths)),
-    http.get("http://localhost:3001/api/preferences", () =>
+    http.get("http://localhost/api/paths", () => HttpResponse.json(paths)),
+    http.get("http://localhost/api/preferences", () =>
       HttpResponse.json({ activePathId: "p1", nativeLanguage: "english", difficultyBias: 0 }),
     ),
   );
@@ -55,7 +56,7 @@ describe("GoalsPage", () => {
 
   test("deleting a path removes it from the list", async () => {
     seedLoad();
-    server.use(http.delete("http://localhost:3001/api/path/:id", () => HttpResponse.json({ ok: true })));
+    server.use(http.delete("http://localhost/api/path/:id", () => HttpResponse.json({ ok: true })));
     const user = userEvent.setup();
     render(<GoalsPage />);
     await screen.findByText("German");
@@ -71,7 +72,7 @@ describe("GoalsPage", () => {
     seedLoad();
     let activeSet: unknown = null;
     server.use(
-      http.post("http://localhost:3001/api/preferences", async ({ request }) => {
+      http.post("http://localhost/api/preferences", async ({ request }) => {
         activeSet = (await request.json()) as unknown;
         return HttpResponse.json({ activePathId: "p2", nativeLanguage: "english", difficultyBias: 0 });
       }),
@@ -89,8 +90,8 @@ describe("GoalsPage", () => {
 
   test("shows the new path form when there are no paths", async () => {
     server.use(
-      http.get("http://localhost:3001/api/paths", () => HttpResponse.json([])),
-      http.get("http://localhost:3001/api/preferences", () =>
+      http.get("http://localhost/api/paths", () => HttpResponse.json([])),
+      http.get("http://localhost/api/preferences", () =>
         HttpResponse.json({ activePathId: null, nativeLanguage: "english", difficultyBias: 0 }),
       ),
     );
@@ -102,13 +103,13 @@ describe("GoalsPage", () => {
   test("a workable scope routes straight to calibration", async () => {
     seedLoad();
     server.use(
-      http.post("http://localhost:3001/api/taxonomy/classify", () =>
+      http.post("http://localhost/api/taxonomy/classify", () =>
         HttpResponse.json({
           taxonomy: ["language", "german"], taxonomyLeaf: "german",
           breadcrumb: "Language / German", confidence: 0.9, matchedOffline: true, createdNode: null,
         }),
       ),
-      http.post("http://localhost:3001/api/taxonomy/scope", () =>
+      http.post("http://localhost/api/taxonomy/scope", () =>
         HttpResponse.json({ breadth: "workable", reason: "ok", questions: [], suggestedObjective: null }),
       ),
     );

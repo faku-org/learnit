@@ -12,9 +12,11 @@
     "astro": "astro",
     "api": "cd api && bun run --preload ./src/preload.ts src/index.ts",
     "test": "bun test --timeout 20000",
-    "typecheck": "bunx tsc --noEmit",
-    "lint": "bunx oxlint src tests",
-    "format": "bunx oxfmt src"
+    "typecheck": "bunx tsc --noEmit && cd api && bunx tsc --noEmit",
+    "lint": "bunx oxlint src tests api/src scripts",
+    "format": "bunx oxfmt src",
+    "check:scoped": "bun scripts/check-scoped.ts",
+    "check": "bun run typecheck && bun run lint && bun run check:scoped && bun run test"
   },
   "dependencies": {
     "@astrojs/react": "^6.0.0",
@@ -45,6 +47,7 @@
     "@types/jsdom": "^28.0.3",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
+    "@wefaber/accounts": "^0.1.0",
     "bun-types": "^1.3.14",
     "jsdom": "^30.0.1",
     "msw": "^2.15.0",

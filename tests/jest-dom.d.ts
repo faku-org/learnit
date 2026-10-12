@@ -8,6 +8,7 @@ declare module "bun:test" {
     toBeEnabled(): void;
     toHaveAttribute(attr: string, value?: string): void;
     toHaveClass(...classNames: string[]): void;
+    toHaveTextContent(text: string | RegExp): void;
   }
 }
 

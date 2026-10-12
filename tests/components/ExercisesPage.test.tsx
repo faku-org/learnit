@@ -3,6 +3,7 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { setSession } from "@/lib/auth";
+import { testUser } from "@tests/handlers";
 import { useMsw } from "@tests/msw";
 import "@/lib/i18n";
 import { ExercisesPage } from "@/components/ExercisesPage";
@@ -11,7 +12,7 @@ const server = useMsw();
 
 afterEach(() => cleanup());
 beforeEach(() => {
-  setSession("tok", { userId: "u1", email: "a@b.c" });
+  setSession(testUser);
 });
 
 const exercises = [
@@ -40,7 +41,7 @@ const exercises = [
 
 function seed(ex = exercises, total = 2) {
   server.use(
-    http.get("http://localhost:3001/api/exercises", () =>
+    http.get("http://localhost/api/exercises", () =>
       HttpResponse.json({ exercises: ex, total }),
     ),
   );
@@ -82,7 +83,7 @@ describe("ExercisesPage", () => {
   test("a type filter refetches with the type", async () => {
     let seen: URLSearchParams | null = null;
     server.use(
-      http.get("http://localhost:3001/api/exercises", ({ request }) => {
+      http.get("http://localhost/api/exercises", ({ request }) => {
         seen = new URLSearchParams(new URL(request.url).search);
         return HttpResponse.json({ exercises: [exercises[0]], total: 1 });
       }),
