@@ -307,6 +307,7 @@
     "answerDontKnow": "You said: I don't know — marked as wrong.",
     "answerWrong": "Not quite — here's the correct answer.",
     "correctAnswerBadge": "Correct answer",
+    "questionMaterial": "Material for this question",
     "dontKnow": "I don't know",
     "seeResults": "See results",
     "calibrationComplete": "Calibration complete",

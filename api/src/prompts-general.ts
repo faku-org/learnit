@@ -6,6 +6,7 @@
 // content blocks, and the generation rules.
 
 import type {
+  BlockKind,
   CalibrationLevel,
   CalibrationProbeLevel,
   DomainSpec,
@@ -438,6 +439,44 @@ Return ONLY valid JSON:
 }`;
 }
 
+/**
+ * Block kinds a placement question may carry beside its prose.
+ *
+ * `text` is dropped because the question is already prose, and `source` because
+ * a source block is a claim that only the exercise pipeline verifies: nothing
+ * here would check it, so a calibration question must not carry one.
+ */
+export function calibrationBlockKinds(spec: DomainSpec): BlockKind[] {
+  return spec.blocks.filter((b) => b !== "text" && b !== "source" && BLOCK_SCHEMAS[b]);
+}
+
+function calibrationBlocksSection(kinds: BlockKind[], nativeLanguage: string): string {
+  const schemas = kinds
+    .map((b) => `  - ${BLOCK_SCHEMAS[b].replace(/NATIVE/g, nativeLanguage)}`)
+    .join("\n");
+  const hints: string[] = [];
+  if (kinds.includes("code")) {
+    hints.push(
+      "When the probe topic can be expressed as code, show a short sample (at most 12 lines, deterministic, runnable as written) in a code block and ask about it: predict the output, spot the bug, name what a line does.",
+    );
+  }
+  if (kinds.includes("latex")) {
+    hints.push(
+      "Put a standalone formula in a latex block. A short formula inside a sentence, an instruction or an option is written inline between single dollar signs, like $x^2 + 1$.",
+    );
+  }
+  return `
+Supporting material:
+- "question" is always plain prose that reads on its own.
+- When the question is about a code sample, a formula, a table or a figure, put that material in the optional "blocks" array. Omit "blocks" when the question needs none.
+- Never paste code, markdown fences, HTML or SVG into "question", "instruction" or an option.
+- An option that is itself code may span lines: use \\n and keep the indentation.
+Allowed block kinds:
+${schemas}
+${hints.map((h) => `- ${h}`).join("\n")}
+`;
+}
+
 export const CALIBRATION_ITEM_SYSTEM_PROMPT = `You write placement test questions.
 Each question has exactly one unambiguously correct answer and no trick wording.
 Calibrate strictly to the requested level.
@@ -454,6 +493,8 @@ export function buildGeneralCalibrationStagePrompt(
   },
 ): string {
   const { probeLevel, stage, topics, askedQuestions, stageSize } = params;
+  const kinds = calibrationBlockKinds(ctx.spec);
+  const supporting = kinds.length > 0 ? calibrationBlocksSection(kinds, ctx.nativeLanguage) : "";
   const topicList = topics.map((t, i) => `${i + 1}. ${t}`).join("\n");
   const exclusion =
     askedQuestions.length > 0
@@ -475,14 +516,14 @@ Rules:
 - The 3 wrong options must be plausible at this level, not obviously absurd.
 - Test something specific. Do not test the same idea twice.
 - Write everything in ${ctx.nativeLanguage}.
-
+${supporting}
 Return ONLY valid JSON:
 {
   "questions": [
     {
       "topic": "probe topic name",
       "question": "the question",
-      "instruction": "short instruction, e.g. 'Which of these is correct?'",
+      "instruction": "short instruction, e.g. 'Which of these is correct?'",${kinds.length > 0 ? '\n      "blocks": [],' : ""}
       "options": ["option", "option", "option", "option"],
       "correctIndex": 0
     }

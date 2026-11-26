@@ -307,6 +307,7 @@
     "answerDontKnow": "Dijiste: no lo sé — se marcó como incorrecta.",
     "answerWrong": "No es exacto — esta es la respuesta correcta.",
     "correctAnswerBadge": "Respuesta correcta",
+    "questionMaterial": "Material de esta pregunta",
     "dontKnow": "No lo sé",
     "seeResults": "Ver resultados",
     "calibrationComplete": "Calibración completa",
