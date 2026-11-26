@@ -38,8 +38,14 @@ type StoredQuery = {
 };
 
 export async function ensureMediaIndexes(db: Db): Promise<void> {
-  await db.collection("media").createIndex({ mediaId: 1 }, { unique: true }).catch(() => {});
-  await db.collection("media_queries").createIndex({ key: 1 }, { unique: true }).catch(() => {});
+  await db
+    .collection("media")
+    .createIndex({ mediaId: 1 }, { unique: true })
+    .catch(() => {});
+  await db
+    .collection("media_queries")
+    .createIndex({ key: 1 }, { unique: true })
+    .catch(() => {});
 }
 
 function queryKey(claim: MediaClaim, spec: DomainSpec): string {

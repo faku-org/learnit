@@ -78,7 +78,10 @@ export function toCandidate(page: Page, kind: MediaKind): MediaCandidate | null 
   // Attribution is part of the license. No author, no show.
   if (!author) return null;
 
-  const name = title.replace(/^File:/, "").replace(/\.[a-z0-9]+$/i, "").replace(/_/g, " ");
+  const name = title
+    .replace(/^File:/, "")
+    .replace(/\.[a-z0-9]+$/i, "")
+    .replace(/_/g, " ");
   const description = plain(meta(info, "ImageDescription"), 400);
   const licenseUrl = meta(info, "LicenseUrl");
 
