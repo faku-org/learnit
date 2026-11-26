@@ -31,7 +31,9 @@ import {
 import {
   CALIBRATION_BLUEPRINT_SYSTEM_PROMPT,
   buildCalibrationBlueprintPrompt,
+  calibrationBlockKinds,
 } from "./prompts-general";
+import { sanitizeCalibrationQuestions } from "./calibration";
 import { synthesizeSpeechXai, transcribeSpeechXai, createRealtimeTokenXai } from "./xaiVoice";
 import {
   EXPLAIN_SYSTEM_PROMPT,
@@ -680,15 +682,7 @@ export const app = new Elysia()
         stageSize: CALIBRATION_STAGE_SIZE,
       });
 
-      const result = await generateJSON<{
-        questions: {
-          topic: string;
-          question: string;
-          instruction: string;
-          options: string[];
-          correctIndex: number;
-        }[];
-      }>(
+      const result = await generateJSON<{ questions: unknown }>(
         system,
         prompt,
         // deepseek-v4-flash is a reasoning model: hidden reasoning_tokens are
@@ -698,11 +692,16 @@ export const app = new Elysia()
         // starts, returning an empty completion ("Unexpected EOF" on parse).
         { temperature: 0.9, maxTokens: 4096 },
       );
-      return {
-        probeLevel,
-        stage,
-        questions: result.questions.slice(0, CALIBRATION_STAGE_SIZE),
-      };
+      // Rebuilt, not passed through: `blocks` is rendered, so it goes through
+      // the same whitelist as an exercise, and a block that does not fit
+      // degrades the question to plain text instead of failing the stage.
+      const questions = sanitizeCalibrationQuestions(
+        result.questions,
+        calibrationBlockKinds(ctx.spec),
+        CALIBRATION_STAGE_SIZE,
+      );
+      if (questions.length === 0) throw new Error("no usable questions in the generated stage");
+      return { probeLevel, stage, questions };
     } catch (err) {
       set.status = 500;
       return { error: "Calibration generation failed", detail: String(err) };

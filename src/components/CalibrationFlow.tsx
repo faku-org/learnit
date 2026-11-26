@@ -13,6 +13,8 @@ import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import "@/lib/i18n";
 import { isLanguagePath } from "@/lib/domains";
+import { ContentBlocks } from "@/components/blocks/ContentBlocks";
+import { InlineText } from "@/components/blocks/InlineText";
 
 const containerVariants = {
   hidden: {},
@@ -523,13 +525,22 @@ export function CalibrationFlow({
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div>
-                    <p className="text-2xl font-display text-foreground mb-1">
-                      {questions[currentQ].question}
+                    <p className="text-2xl font-display text-foreground mb-1 whitespace-pre-wrap">
+                      <InlineText value={questions[currentQ].question} />
                     </p>
                     <p className="text-sm text-muted-foreground">
-                      {questions[currentQ].instruction}
+                      <InlineText value={questions[currentQ].instruction} />
                     </p>
                   </div>
+
+                  {/* Code, formulas and tables the question is about. Absent for
+                      plain prose, and a block that failed validation never got
+                      here, so the question above always stands on its own. */}
+                  {questions[currentQ].blocks && questions[currentQ].blocks.length > 0 && (
+                    <div role="group" aria-label={t("calibration.questionMaterial")}>
+                      <ContentBlocks blocks={questions[currentQ].blocks} />
+                    </div>
+                  )}
 
                   {revealed && (
                     <p
@@ -580,7 +591,7 @@ export function CalibrationFlow({
                                     : "border-border hover:border-primary/30",
                           ].join(" ")}
                         >
-                          <span>{opt}</span>
+                          <OptionText value={opt} />
                           {gotItRight && <Check size={14} />}
                           {shownAsAnswer && (
                             <span className="text-[10px] uppercase tracking-wide text-accent/70 shrink-0">
@@ -760,5 +771,24 @@ function ProjectionSection({ title, options, value, onChange }: ProjectionSectio
         ))}
       </div>
     </motion.div>
+  );
+}
+
+/**
+ * One answer option. A multi-line option is code: it keeps its indentation and
+ * scrolls sideways instead of wrapping. Anything else is prose with inline math.
+ */
+function OptionText({ value }: { value: string }) {
+  if (value.includes("\n")) {
+    return (
+      <code className="min-w-0 flex-1 overflow-x-auto whitespace-pre font-mono text-[13px]">
+        {value}
+      </code>
+    );
+  }
+  return (
+    <span className="min-w-0 flex-1 whitespace-pre-wrap">
+      <InlineText value={value} />
+    </span>
   );
 }

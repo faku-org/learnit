@@ -1,3 +1,5 @@
+import type { ContentBlock } from "@shared/blocks";
+
 /**
  * The API is same-origin: the browser sends the HttpOnly session cookie by itself, nothing is kept in
  * `localStorage`. In dev the Astro server proxies `/api` to the API (see astro.config.mjs). Resolved against the
@@ -93,6 +95,8 @@ export type CalibrationQuestion = {
   instruction: string;
   options: string[];
   correctIndex: number;
+  /** Code, formula, table or figure the question is about. Absent for plain prose. */
+  blocks?: ContentBlock[];
 };
 
 /** One stage of the adaptive placement test. The caller picks the next probeLevel. */

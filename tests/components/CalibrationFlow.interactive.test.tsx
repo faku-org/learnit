@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { useMsw } from "@tests/msw";
@@ -112,5 +112,95 @@ describe("CalibrationFlow interaction", () => {
     expect(await screen.findByText("Calibration complete")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Generate my path" }));
     expect(completed).toBe(true);
+  });
+});
+
+const SAMPLE = "def f(n):\n    if n < 2:\n        return n\n    return f(n - 1)";
+
+function stubQuestion(question: Record<string, unknown>) {
+  server.use(
+    http.post("http://localhost/api/calibration/stage", () =>
+      HttpResponse.json({ probeLevel: "intermediate", stage: 1, questions: [question] }),
+    ),
+  );
+}
+
+async function openQuiz() {
+  const user = userEvent.setup();
+  render(<CalibrationFlow subject="Python" onComplete={() => {}} onSkip={() => {}} />);
+  await answerProjection(user);
+  await user.click(screen.getByRole("button", { name: "Take calibration quiz" }));
+  return user;
+}
+
+describe("CalibrationFlow rich questions", () => {
+  test("a code block renders monospaced with its indentation", async () => {
+    stubQuestion({
+      topic: "recursion",
+      question: "What does f(1) return?",
+      instruction: "Pick one.",
+      options: ["0", "1"],
+      correctIndex: 1,
+      blocks: [{ kind: "code", lang: "python", value: SAMPLE }],
+    });
+    await openQuiz();
+    await screen.findByText("What does f(1) return?");
+
+    const group = screen.getByRole("group", { name: "Material for this question" });
+    expect(group.querySelector("pre code.font-mono")).not.toBeNull();
+    const indented = [...group.querySelectorAll("span.whitespace-pre")].find((s) =>
+      s.textContent?.includes("        return n"),
+    );
+    expect(indented).toBeDefined();
+    expect(group.textContent).toContain("python");
+  });
+
+  test("a plain question renders no material group", async () => {
+    stubQuestion({
+      topic: "t",
+      question: "A plain question",
+      instruction: "Pick one.",
+      options: ["Alpha", "Beta"],
+      correctIndex: 0,
+    });
+    await openQuiz();
+    await screen.findByText("A plain question");
+    expect(screen.queryByRole("group", { name: "Material for this question" })).toBeNull();
+  });
+
+  test("inline math in the question and in an option goes through KaTeX", async () => {
+    stubQuestion({
+      topic: "algebra",
+      question: "What is the derivative of $x^2$?",
+      instruction: "Pick one.",
+      options: ["$2x$", "$x$"],
+      correctIndex: 0,
+    });
+    await openQuiz();
+    await waitFor(() =>
+      expect(document.querySelectorAll(".katex").length).toBeGreaterThanOrEqual(3),
+    );
+    // One formula in the question, one in each option.
+    expect(document.querySelectorAll("button .katex").length).toBe(2);
+  });
+
+  test("a multi-line option renders as code and can be chosen", async () => {
+    const option = "    return n\n    pass";
+    stubQuestion({
+      topic: "recursion",
+      question: "Which body is correct?",
+      instruction: "Pick one.",
+      options: [option, "x = 1"],
+      correctIndex: 0,
+    });
+    const user = await openQuiz();
+    await screen.findByText("Which body is correct?");
+
+    const code = document.querySelector("button code.whitespace-pre");
+    expect(code).not.toBeNull();
+    expect(code!.textContent).toBe(option);
+
+    await user.click(code!.closest("button")!);
+    expect(screen.getByRole("button", { name: "Confirm" })).toBeEnabled();
   });
 });

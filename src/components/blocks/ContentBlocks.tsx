@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { ContentBlock } from "@shared/blocks";
+import { InlineText } from "./InlineText";
 import { Latex } from "./Latex";
 import { Plot } from "./Plot";
 import { Diagram } from "./Diagram";
@@ -9,16 +10,12 @@ import { DataTable } from "./DataTable";
 
 /**
  * Inline `$...$` inside a text block, because a sentence like "solve for $x$"
- * reads badly if the variable has to be its own block. The split is on the
- * delimiter only; the fragment itself goes through KaTeX like any other formula.
+ * reads badly if the variable has to be its own block.
  */
 function TextBlock({ value }: { value: string }) {
-  const parts = value.split(/\$([^$]+)\$/g);
   return (
     <p className="text-foreground leading-relaxed whitespace-pre-wrap">
-      {parts.map((part, i) =>
-        i % 2 === 1 ? <Latex key={i} value={part} /> : <span key={i}>{part}</span>,
-      )}
+      <InlineText value={value} />
     </p>
   );
 }
