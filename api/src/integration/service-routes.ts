@@ -31,10 +31,14 @@ const SERVICE_PREFIX = "/api/service/";
 const PUBLIC_PREFIX = "/api/service/credentials/";
 
 const text = (value: unknown, max: number): string | null =>
-  typeof value === "string" && value.trim().length > 0 && value.trim().length <= max ? value.trim() : null;
+  typeof value === "string" && value.trim().length > 0 && value.trim().length <= max
+    ? value.trim()
+    : null;
 
 const record = (value: unknown): Record<string, unknown> =>
-  value !== null && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+  value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
 
 type Setter = { status?: number | string };
 const fail = (set: Setter, status: number, error: string, code: string) => {
@@ -46,7 +50,8 @@ const fail = (set: Setter, status: number, error: string, code: string) => {
 function blockedBy(consent: ConsentDoc | null, set: Setter, now = new Date()) {
   if (!consent) return fail(set, 404, "not found", "not_found");
   const state = consentState(consent, now);
-  if (state === "revoked") return fail(set, 403, "the applicant revoked this consent", "consent_revoked");
+  if (state === "revoked")
+    return fail(set, 403, "the applicant revoked this consent", "consent_revoked");
   if (state === "expired") return fail(set, 403, "this consent has expired", "consent_expired");
   return null;
 }
@@ -91,11 +96,15 @@ export const serviceRoutes = new Elysia({ name: "learnit-service" })
     const subject = text(input.subject, 120);
     const level = text(input.level, 32);
     const topic = input.topic === undefined || input.topic === null ? null : text(input.topic, 120);
-    const offerId = input.offer_id === undefined || input.offer_id === null ? null : text(input.offer_id, 128);
-    const linkId = input.link_id === undefined || input.link_id === null ? null : text(input.link_id, 128);
-    if (!subject || !level || !/^[a-z0-9_-]+$/i.test(level)) return fail(set, 400, "subject and level are required", "invalid_request");
+    const offerId =
+      input.offer_id === undefined || input.offer_id === null ? null : text(input.offer_id, 128);
+    const linkId =
+      input.link_id === undefined || input.link_id === null ? null : text(input.link_id, 128);
+    if (!subject || !level || !/^[a-z0-9_-]+$/i.test(level))
+      return fail(set, 400, "subject and level are required", "invalid_request");
     if (input.topic != null && !topic) return fail(set, 400, "topic is invalid", "invalid_request");
-    if (input.offer_id != null && !offerId) return fail(set, 400, "offer_id is invalid", "invalid_request");
+    if (input.offer_id != null && !offerId)
+      return fail(set, 400, "offer_id is invalid", "invalid_request");
 
     const db = await getDB();
     const now = new Date();
@@ -109,12 +118,19 @@ export const serviceRoutes = new Elysia({ name: "learnit-service" })
       consentId = consent._id;
     }
 
-    const created = await createAssessment(db, caller, { subject, topic, level, offerId, consentId }, now);
+    const created = await createAssessment(
+      db,
+      caller,
+      { subject, topic, level, offerId, consentId },
+      now,
+    );
     if (!created.ok) {
       return fail(
         set,
         created.code === "unknown_subject" ? 404 : 422,
-        created.code === "unknown_subject" ? "no questions for that subject and level" : "not enough questions yet for that subject, topic and level",
+        created.code === "unknown_subject"
+          ? "no questions for that subject and level"
+          : "not enough questions yet for that subject, topic and level",
         created.code,
       );
     }
@@ -164,7 +180,8 @@ export const serviceRoutes = new Elysia({ name: "learnit-service" })
     const code = text(record(body).code, 200);
     if (!code) return fail(set, 400, "code is required", "invalid_request");
 
-    const linkId = crypto.randomUUID().replaceAll("-", "") + crypto.randomUUID().replaceAll("-", "");
+    const linkId =
+      crypto.randomUUID().replaceAll("-", "") + crypto.randomUUID().replaceAll("-", "");
     const consent = await redeemCode(await getDB(), sha256Hex(code), sha256Hex(linkId), new Date());
     // One answer for unknown, spent, expired and revoked: the caller learns nothing about which.
     if (!consent) return fail(set, 400, "that code is not valid", "invalid_code");
@@ -188,22 +205,41 @@ export const serviceRoutes = new Elysia({ name: "learnit-service" })
 
     const scope = forUser(db, consent.userId);
     const at = now.toISOString();
-    const shared: { assessment: ReturnType<typeof resultOf> | null; credential: SignedCredential | null; paths: unknown[] } = {
+    const shared: {
+      assessment: ReturnType<typeof resultOf> | null;
+      credential: SignedCredential | null;
+      paths: unknown[];
+    } = {
       assessment: null,
       credential: null,
       paths: [],
     };
 
     if (consent.scopes.includes("assessment")) {
-      const mine = (await scope.of("assessments").find({ consentId: consent._id, status: "completed" }).toArray()) as unknown as AssessmentDoc[];
-      const latest = mine.sort((a, b) => (b.completedAt ?? "").localeCompare(a.completedAt ?? ""))[0];
+      const mine = (await scope
+        .of("assessments")
+        .find({ consentId: consent._id, status: "completed" })
+        .toArray()) as unknown as AssessmentDoc[];
+      const latest = mine.sort((a, b) =>
+        (b.completedAt ?? "").localeCompare(a.completedAt ?? ""),
+      )[0];
       if (latest) {
         shared.assessment = resultOf(latest, now);
-        await recordShare(db, consent.userId, { consentId: consent._id, what: "assessment_result", ref: latest._id, at });
+        await recordShare(db, consent.userId, {
+          consentId: consent._id,
+          what: "assessment_result",
+          ref: latest._id,
+          at,
+        });
         const credential = await findCredentialForAssessment(db, latest._id);
         if (credential) {
           shared.credential = credential.signed as unknown as SignedCredential;
-          await recordShare(db, consent.userId, { consentId: consent._id, what: "credential", ref: credential._id, at });
+          await recordShare(db, consent.userId, {
+            consentId: consent._id,
+            what: "credential",
+            ref: credential._id,
+            at,
+          });
         }
       }
     }
@@ -216,8 +252,15 @@ export const serviceRoutes = new Elysia({ name: "learnit-service" })
       pathIds.map(async (id) => {
         const path = await scope.of("paths").findOne({ _id: new ObjectId(id) } as never);
         if (!path) return null;
-        const modules = Array.isArray(path.modules) ? (path.modules as { name?: string; topics?: { name?: string }[] }[]) : [];
-        await recordShare(db, consent.userId, { consentId: consent._id, what: "path", ref: id, at });
+        const modules = Array.isArray(path.modules)
+          ? (path.modules as { name?: string; topics?: { name?: string }[] }[])
+          : [];
+        await recordShare(db, consent.userId, {
+          consentId: consent._id,
+          what: "path",
+          ref: id,
+          at,
+        });
         return {
           id,
           subject: path.subject ?? null,
@@ -232,7 +275,12 @@ export const serviceRoutes = new Elysia({ name: "learnit-service" })
     );
     for (const entry of sharedPaths) if (entry) shared.paths.push(entry);
 
-    return { application_id: consent.applicationId, scopes: consent.scopes, expires_at: consent.expiresAt, ...shared };
+    return {
+      application_id: consent.applicationId,
+      scopes: consent.scopes,
+      expires_at: consent.expiresAt,
+      ...shared,
+    };
   });
 
 /* --- Public: anyone can verify a credential --------------------------------------------------------------- */
@@ -257,10 +305,17 @@ export const credentialRoutes = new Elysia({ name: "learnit-credentials" })
 
     // Revoking the consent withdraws the credential too; an expired credential is refused the same way.
     const consent = await findConsentById(db, credential.consentId);
-    if (!consent || consentState(consent, now) === "revoked") return fail(set, 410, "this credential was revoked", "revoked");
-    if (credential.expiresAt <= now.toISOString()) return fail(set, 410, "this credential has expired", "expired");
+    if (!consent || consentState(consent, now) === "revoked")
+      return fail(set, 410, "this credential was revoked", "revoked");
+    if (credential.expiresAt <= now.toISOString())
+      return fail(set, 410, "this credential has expired", "expired");
 
-    await recordShare(db, credential.userId, { consentId: credential.consentId, what: "credential", ref: credential._id, at: now.toISOString() });
+    await recordShare(db, credential.userId, {
+      consentId: credential.consentId,
+      what: "credential",
+      ref: credential._id,
+      at: now.toISOString(),
+    });
     set.headers["cache-control"] = "no-store";
     return credential.signed;
   });

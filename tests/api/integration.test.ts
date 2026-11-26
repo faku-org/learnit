@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { verifyCredential, type PublicKeyDocument, type SignedCredential } from "../../api/src/integration/credentials";
+import {
+  verifyCredential,
+  type PublicKeyDocument,
+  type SignedCredential,
+} from "../../api/src/integration/credentials";
 import { CREDENTIAL_KEY, SERVICE_TOKEN, SERVICE_TOKEN_NEXT, app, limiter, state } from "./harness";
 import { memDb, objectIdHex } from "./memdb";
 
@@ -53,7 +57,11 @@ const svc = { token: SERVICE_TOKEN };
 
 async function signUp(handle: string) {
   const jar = new Jar();
-  const res = await call({ jar }, "POST", "/api/auth/register", { handle, displayName: handle, password: PASSWORD });
+  const res = await call({ jar }, "POST", "/api/auth/register", {
+    handle,
+    displayName: handle,
+    password: PASSWORD,
+  });
   expect(res.status).toBe(201);
   const me = await json(await call({ jar }, "GET", "/api/me"));
   return { jar, id: String(me.user.id), handle };
@@ -80,24 +88,41 @@ const allRight = (count: number) => Array.from({ length: count }, (_, q) => ({ q
 const allWrong = (count: number) => Array.from({ length: count }, (_, q) => ({ q, choice: 0 }));
 
 async function createAssessment(extra: Record<string, unknown> = {}) {
-  const res = await call(svc, "POST", "/api/service/assessments", { subject: "german", level: "beginner", offer_id: "offer-7", ...extra });
+  const res = await call(svc, "POST", "/api/service/assessments", {
+    subject: "german",
+    level: "beginner",
+    offer_id: "offer-7",
+    ...extra,
+  });
   return { res, body: await json(res) };
 }
 
 async function consentFor(user: { jar: Jar }, extra: Record<string, unknown> = {}) {
-  const res = await call(user, "POST", "/api/integration/consents", { applicationId: "app-1", ...extra });
+  const res = await call(user, "POST", "/api/integration/consents", {
+    applicationId: "app-1",
+    ...extra,
+  });
   return { res, body: await json(res) };
 }
 
 /** Create, claim and submit an assessment as `user`. Returns everything a test may want to look at. */
-async function takeAssessment(user: { jar: Jar }, answers: (n: number) => { q: number; choice: number }[], extra: Record<string, unknown> = {}) {
+async function takeAssessment(
+  user: { jar: Jar },
+  answers: (n: number) => { q: number; choice: number }[],
+  extra: Record<string, unknown> = {},
+) {
   const created = (await createAssessment(extra)).body;
-  const claim = await json(await call(user, "POST", "/api/integration/assessments/claim", { code: created.code }));
-  const submit = await call(user, "POST", `/api/integration/assessments/${created.id}/answers`, { answers: answers(claim.questions.length) });
+  const claim = await json(
+    await call(user, "POST", "/api/integration/assessments/claim", { code: created.code }),
+  );
+  const submit = await call(user, "POST", `/api/integration/assessments/${created.id}/answers`, {
+    answers: answers(claim.questions.length),
+  });
   return { created, claim, submit, result: await json(submit) };
 }
 
-const rows = async (name: string) => (await state.db.collection(name).find({}).toArray()) as Record<string, any>[];
+const rows = async (name: string) =>
+  (await state.db.collection(name).find({}).toArray()) as Record<string, any>[];
 
 beforeEach(() => {
   state.db = memDb();
@@ -124,9 +149,18 @@ describe("GET /api/catalog", () => {
   test("never carries personal data, even when users and paths exist", async () => {
     await seedBank(3);
     const user = await signUp("anna");
-    await state.db.collection("paths").insertOne({ _id: objectIdHex(), userId: user.id, subject: "German", objective: "secret goal", modules: [] } as never);
+    await state.db
+      .collection("paths")
+      .insertOne({
+        _id: objectIdHex(),
+        userId: user.id,
+        subject: "German",
+        objective: "secret goal",
+        modules: [],
+      } as never);
     const text = JSON.stringify(await json(await call({}, "GET", "/api/catalog")));
-    for (const leak of [user.id, "anna", "secret goal", "userId", "email"]) expect(text).not.toContain(leak);
+    for (const leak of [user.id, "anna", "secret goal", "userId", "email"])
+      expect(text).not.toContain(leak);
   });
 
   test("has no write verbs", async () => {
@@ -155,7 +189,9 @@ describe("service token", () => {
     for (const token of ["nope", "x".repeat(40), SERVICE_TOKEN.slice(0, 20)]) {
       expect((await call({ token }, "GET", "/api/service/assessments/anything")).status).toBe(401);
     }
-    const basic = await call({}, "GET", "/api/service/assessments/anything", undefined, { authorization: `Basic ${SERVICE_TOKEN}` });
+    const basic = await call({}, "GET", "/api/service/assessments/anything", undefined, {
+      authorization: `Basic ${SERVICE_TOKEN}`,
+    });
     expect(basic.status).toBe(401);
   });
 
@@ -164,16 +200,26 @@ describe("service token", () => {
   });
 
   test("rotation: every configured token works", async () => {
-    expect((await call({ token: SERVICE_TOKEN }, "GET", "/api/service/assessments/anything")).status).toBe(404);
-    expect((await call({ token: SERVICE_TOKEN_NEXT }, "GET", "/api/service/assessments/anything")).status).toBe(404);
+    expect(
+      (await call({ token: SERVICE_TOKEN }, "GET", "/api/service/assessments/anything")).status,
+    ).toBe(404);
+    expect(
+      (await call({ token: SERVICE_TOKEN_NEXT }, "GET", "/api/service/assessments/anything"))
+        .status,
+    ).toBe(404);
   });
 
   test("a removed token stops working", async () => {
     const previous = process.env.SERVICE_TOKENS;
     process.env.SERVICE_TOKENS = SERVICE_TOKEN_NEXT;
     try {
-      expect((await call({ token: SERVICE_TOKEN }, "GET", "/api/service/assessments/anything")).status).toBe(401);
-      expect((await call({ token: SERVICE_TOKEN_NEXT }, "GET", "/api/service/assessments/anything")).status).toBe(404);
+      expect(
+        (await call({ token: SERVICE_TOKEN }, "GET", "/api/service/assessments/anything")).status,
+      ).toBe(401);
+      expect(
+        (await call({ token: SERVICE_TOKEN_NEXT }, "GET", "/api/service/assessments/anything"))
+          .status,
+      ).toBe(404);
     } finally {
       process.env.SERVICE_TOKENS = previous;
     }
@@ -202,7 +248,8 @@ describe("service token", () => {
 
   test("failed attempts are rate limited per address", async () => {
     let last = 0;
-    for (let i = 0; i < 40; i++) last = (await call({ token: "wrong" }, "GET", "/api/service/assessments/x")).status;
+    for (let i = 0; i < 40; i++)
+      last = (await call({ token: "wrong" }, "GET", "/api/service/assessments/x")).status;
     expect(last).toBe(429);
   });
 });
@@ -242,15 +289,25 @@ describe("assessments", () => {
     await seedBank(4);
     const { body } = await createAssessment();
     const result = await json(await call(svc, "GET", `/api/service/assessments/${body.id}`));
-    expect(result).toMatchObject({ id: body.id, status: "pending", passed: null, score: null, failed_topics: [] });
+    expect(result).toMatchObject({
+      id: body.id,
+      status: "pending",
+      passed: null,
+      score: null,
+      failed_topics: [],
+    });
   });
 
   test("the applicant needs a session to claim, and a valid code", async () => {
     await seedBank(4);
     const { body } = await createAssessment();
-    expect((await call({}, "POST", "/api/integration/assessments/claim", { code: body.code })).status).toBe(401);
+    expect(
+      (await call({}, "POST", "/api/integration/assessments/claim", { code: body.code })).status,
+    ).toBe(401);
     const user = await signUp("anna");
-    expect((await call(user, "POST", "/api/integration/assessments/claim", { code: "wrong" })).status).toBe(404);
+    expect(
+      (await call(user, "POST", "/api/integration/assessments/claim", { code: "wrong" })).status,
+    ).toBe(404);
   });
 
   test("claiming shows the questions and never the answer key", async () => {
@@ -260,7 +317,8 @@ describe("assessments", () => {
     const res = await call(user, "POST", "/api/integration/assessments/claim", { code: body.code });
     expect(res.status).toBe(200);
     const text = JSON.stringify(await json(res));
-    for (const key of ["correctIndex", "correctAnswer", "spec", "grading"]) expect(text).not.toContain(key);
+    for (const key of ["correctIndex", "correctAnswer", "spec", "grading"])
+      expect(text).not.toContain(key);
     expect(text).toContain("Question");
   });
 
@@ -268,10 +326,20 @@ describe("assessments", () => {
     await seedBank(4);
     const user = await signUp("anna");
     const { created, result } = await takeAssessment(user, allRight);
-    expect(result).toMatchObject({ status: "completed", passed: true, score: 100, failed_topics: [] });
+    expect(result).toMatchObject({
+      status: "completed",
+      passed: true,
+      score: 100,
+      failed_topics: [],
+    });
 
     const read = await json(await call(svc, "GET", `/api/service/assessments/${created.id}`));
-    expect(read).toMatchObject({ status: "completed", passed: true, score: 100, failed_topics: [] });
+    expect(read).toMatchObject({
+      status: "completed",
+      passed: true,
+      score: 100,
+      failed_topics: [],
+    });
   });
 
   test("failing: reports the failed topics and issues no credential", async () => {
@@ -297,9 +365,13 @@ describe("assessments", () => {
     await seedBank(4);
     const user = await signUp("anna");
     const { created } = await takeAssessment(user, allRight);
-    const again = await call(user, "POST", `/api/integration/assessments/${created.id}/answers`, { answers: allWrong(4) });
+    const again = await call(user, "POST", `/api/integration/assessments/${created.id}/answers`, {
+      answers: allWrong(4),
+    });
     expect(again.status).toBe(409);
-    expect((await json(await call(svc, "GET", `/api/service/assessments/${created.id}`))).passed).toBe(true);
+    expect(
+      (await json(await call(svc, "GET", `/api/service/assessments/${created.id}`))).passed,
+    ).toBe(true);
   });
 
   test("another account cannot claim the same code, nor submit for it", async () => {
@@ -307,26 +379,46 @@ describe("assessments", () => {
     const anna = await signUp("anna");
     const bob = await signUp("bob");
     const { body } = await createAssessment();
-    expect((await call(anna, "POST", "/api/integration/assessments/claim", { code: body.code })).status).toBe(200);
-    expect((await call(bob, "POST", "/api/integration/assessments/claim", { code: body.code })).status).toBe(404);
-    expect((await call(bob, "POST", `/api/integration/assessments/${body.id}/answers`, { answers: allRight(4) })).status).toBe(404);
+    expect(
+      (await call(anna, "POST", "/api/integration/assessments/claim", { code: body.code })).status,
+    ).toBe(200);
+    expect(
+      (await call(bob, "POST", "/api/integration/assessments/claim", { code: body.code })).status,
+    ).toBe(404);
+    expect(
+      (
+        await call(bob, "POST", `/api/integration/assessments/${body.id}/answers`, {
+          answers: allRight(4),
+        })
+      ).status,
+    ).toBe(404);
   });
 
   test("the same applicant can resume an assessment in progress", async () => {
     await seedBank(4);
     const anna = await signUp("anna");
     const { body } = await createAssessment();
-    expect((await call(anna, "POST", "/api/integration/assessments/claim", { code: body.code })).status).toBe(200);
-    expect((await call(anna, "POST", "/api/integration/assessments/claim", { code: body.code })).status).toBe(200);
+    expect(
+      (await call(anna, "POST", "/api/integration/assessments/claim", { code: body.code })).status,
+    ).toBe(200);
+    expect(
+      (await call(anna, "POST", "/api/integration/assessments/claim", { code: body.code })).status,
+    ).toBe(200);
   });
 
   test("an expired assessment cannot be claimed or submitted", async () => {
     await seedBank(4);
     const anna = await signUp("anna");
     const { body } = await createAssessment();
-    await state.db.collection("assessments").updateOne({ _id: body.id } as never, { $set: { expiresAt: "2000-01-01T00:00:00.000Z" } });
-    expect((await call(anna, "POST", "/api/integration/assessments/claim", { code: body.code })).status).toBe(410);
-    expect((await json(await call(svc, "GET", `/api/service/assessments/${body.id}`))).status).toBe("expired");
+    await state.db
+      .collection("assessments")
+      .updateOne({ _id: body.id } as never, { $set: { expiresAt: "2000-01-01T00:00:00.000Z" } });
+    expect(
+      (await call(anna, "POST", "/api/integration/assessments/claim", { code: body.code })).status,
+    ).toBe(410);
+    expect((await json(await call(svc, "GET", `/api/service/assessments/${body.id}`))).status).toBe(
+      "expired",
+    );
   });
 
   test("the answers route needs a session and the same origin", async () => {
@@ -334,8 +426,17 @@ describe("assessments", () => {
     const anna = await signUp("anna");
     const { body } = await createAssessment();
     await call(anna, "POST", "/api/integration/assessments/claim", { code: body.code });
-    expect((await call({}, "POST", `/api/integration/assessments/${body.id}/answers`, { answers: [] })).status).toBe(401);
-    const cross = await call(anna, "POST", `/api/integration/assessments/${body.id}/answers`, { answers: [] }, { origin: "https://evil.example" });
+    expect(
+      (await call({}, "POST", `/api/integration/assessments/${body.id}/answers`, { answers: [] }))
+        .status,
+    ).toBe(401);
+    const cross = await call(
+      anna,
+      "POST",
+      `/api/integration/assessments/${body.id}/answers`,
+      { answers: [] },
+      { origin: "https://evil.example" },
+    );
     expect(cross.status).toBe(403);
   });
 });
@@ -343,11 +444,22 @@ describe("assessments", () => {
 describe("consent and link", () => {
   test("creating a consent needs a session, the same origin and an application", async () => {
     const anna = await signUp("anna");
-    expect((await call({}, "POST", "/api/integration/consents", { applicationId: "a" })).status).toBe(401);
-    const cross = await call(anna, "POST", "/api/integration/consents", { applicationId: "a" }, { origin: "https://evil.example" });
+    expect(
+      (await call({}, "POST", "/api/integration/consents", { applicationId: "a" })).status,
+    ).toBe(401);
+    const cross = await call(
+      anna,
+      "POST",
+      "/api/integration/consents",
+      { applicationId: "a" },
+      { origin: "https://evil.example" },
+    );
     expect(cross.status).toBe(403);
     expect((await call(anna, "POST", "/api/integration/consents", {})).status).toBe(400);
-    expect((await call(anna, "POST", "/api/integration/consents", { applicationId: "a", days: 9999 })).status).toBe(400);
+    expect(
+      (await call(anna, "POST", "/api/integration/consents", { applicationId: "a", days: 9999 }))
+        .status,
+    ).toBe(400);
   });
 
   test("returns a one-time code, stores only its hash, and shares only the assessment by default", async () => {
@@ -387,7 +499,9 @@ describe("consent and link", () => {
   test("two simultaneous redemptions: exactly one wins", async () => {
     const anna = await signUp("anna");
     const { body: consent } = await consentFor(anna);
-    const results = await Promise.all([1, 2, 3, 4].map(() => call(svc, "POST", "/api/service/link", { code: consent.code })));
+    const results = await Promise.all(
+      [1, 2, 3, 4].map(() => call(svc, "POST", "/api/service/link", { code: consent.code })),
+    );
     expect(results.filter((r) => r.status === 201)).toHaveLength(1);
   });
 
@@ -396,7 +510,11 @@ describe("consent and link", () => {
     const unknown = await call(svc, "POST", "/api/service/link", { code: "nope" });
 
     const { body: stale } = await consentFor(anna);
-    await state.db.collection("integration_consents").updateOne({ _id: stale.id } as never, { $set: { codeExpiresAt: "2000-01-01T00:00:00.000Z" } });
+    await state.db
+      .collection("integration_consents")
+      .updateOne({ _id: stale.id } as never, {
+        $set: { codeExpiresAt: "2000-01-01T00:00:00.000Z" },
+      });
     const expired = await call(svc, "POST", "/api/service/link", { code: stale.code });
 
     const { body: gone } = await consentFor(anna);
@@ -405,7 +523,9 @@ describe("consent and link", () => {
 
     for (const res of [unknown, expired, revoked]) {
       expect(res.status).toBe(400);
-      expect(JSON.stringify(await json(res))).toBe(JSON.stringify({ error: "that code is not valid", code: "invalid_code" }));
+      expect(JSON.stringify(await json(res))).toBe(
+        JSON.stringify({ error: "that code is not valid", code: "invalid_code" }),
+      );
     }
   });
 
@@ -435,7 +555,15 @@ describe("what a link reveals", () => {
   test("by default only the assessment result is shared, never the path", async () => {
     await seedBank(4);
     const anna = await signUp("anna");
-    await state.db.collection("paths").insertOne({ _id: objectIdHex(), userId: anna.id, subject: "German", objective: "private goal", modules: [] } as never);
+    await state.db
+      .collection("paths")
+      .insertOne({
+        _id: objectIdHex(),
+        userId: anna.id,
+        subject: "German",
+        objective: "private goal",
+        modules: [],
+      } as never);
     const { consent, linkId } = await linked(anna);
     await takeAssessment(anna, allRight, { link_id: linkId });
 
@@ -455,16 +583,32 @@ describe("what a link reveals", () => {
     const shared = objectIdHex();
     const kept = objectIdHex();
     await state.db.collection("paths").insertOne({
-      _id: shared, userId: anna.id, subject: "German", objective: "share me", startingLevel: "complete_beginner",
+      _id: shared,
+      userId: anna.id,
+      subject: "German",
+      objective: "share me",
+      startingLevel: "complete_beginner",
       modules: [{ name: "Basics", topics: [{ name: "Hello" }] }],
     } as never);
-    await state.db.collection("paths").insertOne({ _id: kept, userId: anna.id, subject: "French", objective: "keep me", modules: [] } as never);
+    await state.db
+      .collection("paths")
+      .insertOne({
+        _id: kept,
+        userId: anna.id,
+        subject: "French",
+        objective: "keep me",
+        modules: [],
+      } as never);
 
     const { linkId } = await linked(anna, { paths: [shared] });
     const body = await json(await call(svc, "GET", `/api/service/links/${linkId}`));
     expect(body.scopes).toEqual(["assessment", `path:${shared}`]);
     expect(body.paths).toHaveLength(1);
-    expect(body.paths[0]).toMatchObject({ id: shared, subject: "German", modules: [{ name: "Basics", topics: [{ name: "Hello" }] }] });
+    expect(body.paths[0]).toMatchObject({
+      id: shared,
+      subject: "German",
+      modules: [{ name: "Basics", topics: [{ name: "Hello" }] }],
+    });
     expect(JSON.stringify(body)).not.toContain("keep me");
   });
 
@@ -472,10 +616,22 @@ describe("what a link reveals", () => {
     const anna = await signUp("anna");
     const bob = await signUp("bob");
     const bobsPath = objectIdHex();
-    await state.db.collection("paths").insertOne({ _id: bobsPath, userId: bob.id, subject: "German", modules: [] } as never);
-    const res = await call(anna, "POST", "/api/integration/consents", { applicationId: "a", paths: [bobsPath] });
+    await state.db
+      .collection("paths")
+      .insertOne({ _id: bobsPath, userId: bob.id, subject: "German", modules: [] } as never);
+    const res = await call(anna, "POST", "/api/integration/consents", {
+      applicationId: "a",
+      paths: [bobsPath],
+    });
     expect(res.status).toBe(404);
-    expect((await call(anna, "POST", "/api/integration/consents", { applicationId: "a", paths: ["not-an-id"] })).status).toBe(400);
+    expect(
+      (
+        await call(anna, "POST", "/api/integration/consents", {
+          applicationId: "a",
+          paths: ["not-an-id"],
+        })
+      ).status,
+    ).toBe(400);
   });
 
   test("an unknown link id is 404", async () => {
@@ -493,7 +649,10 @@ describe("what a link reveals", () => {
     const entry = listed.consents.find((c: any) => c.id === consent.id);
     expect(entry.state).toBe("active");
     expect(entry.redeemed).toBe(true);
-    expect(entry.shared.map((s: any) => s.what).sort()).toEqual(["assessment_result", "credential"]);
+    expect(entry.shared.map((s: any) => s.what).sort()).toEqual([
+      "assessment_result",
+      "credential",
+    ]);
     for (const share of entry.shared) expect(Date.parse(share.at)).not.toBeNaN();
     expect(JSON.stringify(listed)).not.toContain(consent.code);
   });
@@ -504,9 +663,13 @@ describe("what a link reveals", () => {
     const bob = await signUp("bob");
     const { linkId } = await linked(anna);
     const { body } = await createAssessment({ link_id: linkId });
-    const stolen = await call(bob, "POST", "/api/integration/assessments/claim", { code: body.code });
+    const stolen = await call(bob, "POST", "/api/integration/assessments/claim", {
+      code: body.code,
+    });
     expect(stolen.status).toBe(403);
-    expect((await call(anna, "POST", "/api/integration/assessments/claim", { code: body.code })).status).toBe(200);
+    expect(
+      (await call(anna, "POST", "/api/integration/assessments/claim", { code: body.code })).status,
+    ).toBe(200);
   });
 
   test("creating an assessment against an unknown or revoked link is refused", async () => {
@@ -526,13 +689,21 @@ describe("revoking and expiring consent", () => {
     const { body: consent } = await consentFor(anna);
     const link = await json(await call(svc, "POST", "/api/service/link", { code: consent.code }));
     const taken = await takeAssessment(anna, allRight, { link_id: link.link_id });
-    return { anna, consent, linkId: link.link_id as string, taken, token: taken.result.credentialToken as string };
+    return {
+      anna,
+      consent,
+      linkId: link.link_id as string,
+      taken,
+      token: taken.result.credentialToken as string,
+    };
   }
 
   test("everything reads fine while the consent is active", async () => {
     const { linkId, taken, token } = await setup();
     expect((await call(svc, "GET", `/api/service/links/${linkId}`)).status).toBe(200);
-    expect((await call(svc, "GET", `/api/service/assessments/${taken.created.id}`)).status).toBe(200);
+    expect((await call(svc, "GET", `/api/service/assessments/${taken.created.id}`)).status).toBe(
+      200,
+    );
     expect((await call({}, "GET", `/api/service/credentials/${token}`)).status).toBe(200);
   });
 
@@ -570,21 +741,31 @@ describe("revoking and expiring consent", () => {
     const { anna, consent } = await setup();
     const bob = await signUp("bob");
     expect((await call(bob, "DELETE", `/api/integration/consents/${consent.id}`)).status).toBe(404);
-    expect((await call(anna, "DELETE", `/api/integration/consents/${consent.id}`)).status).toBe(200);
-    expect((await call(anna, "DELETE", `/api/integration/consents/${consent.id}`)).status).toBe(200);
+    expect((await call(anna, "DELETE", `/api/integration/consents/${consent.id}`)).status).toBe(
+      200,
+    );
+    expect((await call(anna, "DELETE", `/api/integration/consents/${consent.id}`)).status).toBe(
+      200,
+    );
     expect((await call({}, "DELETE", `/api/integration/consents/${consent.id}`)).status).toBe(401);
-    const cross = await call(anna, "DELETE", `/api/integration/consents/${consent.id}`, undefined, { origin: "https://evil.example" });
+    const cross = await call(anna, "DELETE", `/api/integration/consents/${consent.id}`, undefined, {
+      origin: "https://evil.example",
+    });
     expect(cross.status).toBe(403);
   });
 
   test("an expired consent cuts reads too", async () => {
     const { consent, linkId, taken, token } = await setup();
-    await state.db.collection("integration_consents").updateOne({ _id: consent.id } as never, { $set: { expiresAt: "2000-01-01T00:00:00.000Z" } });
+    await state.db
+      .collection("integration_consents")
+      .updateOne({ _id: consent.id } as never, { $set: { expiresAt: "2000-01-01T00:00:00.000Z" } });
 
     const link = await call(svc, "GET", `/api/service/links/${linkId}`);
     expect(link.status).toBe(403);
     expect((await json(link)).code).toBe("consent_expired");
-    expect((await call(svc, "GET", `/api/service/assessments/${taken.created.id}`)).status).toBe(403);
+    expect((await call(svc, "GET", `/api/service/assessments/${taken.created.id}`)).status).toBe(
+      403,
+    );
     expect((await call({}, "GET", `/api/service/credentials/${token}`)).status).toBe(200);
   });
 
@@ -596,7 +777,9 @@ describe("revoking and expiring consent", () => {
     const { body } = await createAssessment({ link_id: link.link_id });
     await call(anna, "POST", "/api/integration/assessments/claim", { code: body.code });
     await call(anna, "DELETE", `/api/integration/consents/${consent.id}`);
-    const submit = await call(anna, "POST", `/api/integration/assessments/${body.id}/answers`, { answers: allRight(4) });
+    const submit = await call(anna, "POST", `/api/integration/assessments/${body.id}/answers`, {
+      answers: allRight(4),
+    });
     expect(submit.status).toBe(403);
   });
 
@@ -611,7 +794,9 @@ describe("revoking and expiring consent", () => {
     const bob = await signUp("bob");
     await consentFor(anna);
     expect((await json(await call(bob, "GET", "/api/integration/consents"))).consents).toEqual([]);
-    expect((await json(await call(anna, "GET", "/api/integration/consents"))).consents).toHaveLength(1);
+    expect(
+      (await json(await call(anna, "GET", "/api/integration/consents"))).consents,
+    ).toHaveLength(1);
     expect((await call({}, "GET", "/api/integration/consents")).status).toBe(401);
   });
 });
@@ -622,8 +807,12 @@ describe("signed credentials", () => {
     const anna = await signUp("anna");
     const taken = await takeAssessment(anna, allRight);
     const token = taken.result.credentialToken as string;
-    const publicKey = (await json(await call({}, "GET", "/api/service/credentials/public-key"))) as PublicKeyDocument;
-    const signed = (await json(await call({}, "GET", `/api/service/credentials/${token}`))) as SignedCredential;
+    const publicKey = (await json(
+      await call({}, "GET", "/api/service/credentials/public-key"),
+    )) as PublicKeyDocument;
+    const signed = (await json(
+      await call({}, "GET", `/api/service/credentials/${token}`),
+    )) as SignedCredential;
     return { anna, taken, token, publicKey, signed };
   }
 
@@ -646,7 +835,14 @@ describe("signed credentials", () => {
 
   test("the credential is public and verifies against the public key", async () => {
     const { signed, publicKey } = await issued();
-    expect(signed.credential).toMatchObject({ v: 1, type: "learnit.assessment", passed: true, score: 100, level: "beginner", audience: "offer-7" });
+    expect(signed.credential).toMatchObject({
+      v: 1,
+      type: "learnit.assessment",
+      passed: true,
+      score: 100,
+      level: "beginner",
+      audience: "offer-7",
+    });
     expect(signed.credential.subject.name).toBe("German");
     expect(signed.proof).toMatchObject({ alg: "Ed25519", kid: publicKey.kid });
     expect(await verifyCredential(signed, publicKey.jwk)).toBe(true);
@@ -682,7 +878,11 @@ describe("signed credentials", () => {
     flipped.proof.signature = first + flipped.proof.signature.slice(1);
     expect(await verifyCredential(flipped, publicKey.jwk)).toBe(false);
 
-    const other = (await crypto.subtle.exportKey("jwk", ((await crypto.subtle.generateKey("Ed25519", true, ["sign", "verify"])) as CryptoKeyPair).publicKey)) as { x: string };
+    const other = (await crypto.subtle.exportKey(
+      "jwk",
+      ((await crypto.subtle.generateKey("Ed25519", true, ["sign", "verify"])) as CryptoKeyPair)
+        .publicKey,
+    )) as { x: string };
     expect(await verifyCredential(signed, { kty: "OKP", crv: "Ed25519", x: other.x })).toBe(false);
 
     const garbage = structuredClone(signed);
@@ -696,7 +896,9 @@ describe("signed credentials", () => {
 
   test("an expired credential is 410", async () => {
     const { token } = await issued();
-    await state.db.collection("assessment_credentials").updateOne({}, { $set: { expiresAt: "2000-01-01T00:00:00.000Z" } });
+    await state.db
+      .collection("assessment_credentials")
+      .updateOne({}, { $set: { expiresAt: "2000-01-01T00:00:00.000Z" } });
     expect((await call({}, "GET", `/api/service/credentials/${token}`)).status).toBe(410);
   });
 
@@ -727,7 +929,8 @@ describe("signed credentials", () => {
 
   test("public lookups are rate limited per address", async () => {
     let last = 0;
-    for (let i = 0; i < 130; i++) last = (await call({}, "GET", "/api/service/credentials/nope")).status;
+    for (let i = 0; i < 130; i++)
+      last = (await call({}, "GET", "/api/service/credentials/nope")).status;
     expect(last).toBe(429);
   });
 });
@@ -744,13 +947,25 @@ describe("account deletion (ADR 0002)", () => {
       await takeAssessment(user, allRight, { link_id: link.link_id });
       await call(svc, "GET", `/api/service/links/${link.link_id}`);
     }
-    for (const name of ["integration_consents", "integration_shares", "assessments", "assessment_credentials"]) {
+    for (const name of [
+      "integration_consents",
+      "integration_shares",
+      "assessments",
+      "assessment_credentials",
+    ]) {
       expect((await rows(name)).filter((r) => r.userId === anna.id).length).toBeGreaterThan(0);
     }
 
-    expect((await call(anna, "DELETE", "/api/me", { confirm: "anna", password: PASSWORD })).status).toBe(200);
+    expect(
+      (await call(anna, "DELETE", "/api/me", { confirm: "anna", password: PASSWORD })).status,
+    ).toBe(200);
 
-    for (const name of ["integration_consents", "integration_shares", "assessments", "assessment_credentials"]) {
+    for (const name of [
+      "integration_consents",
+      "integration_shares",
+      "assessments",
+      "assessment_credentials",
+    ]) {
       const left = await rows(name);
       expect(left.filter((r) => r.userId === anna.id)).toHaveLength(0);
       expect(left.filter((r) => r.userId === bob.id).length).toBeGreaterThan(0);

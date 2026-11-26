@@ -38,7 +38,11 @@ const fail = (set: Setter, status: number, error: string, code: string) => {
 const stateOf = (consent: ConsentDoc, now: Date) => consentState(consent, now);
 
 /** Never includes the code or the link hash: the code was shown once, at creation. */
-const consentView = (consent: ConsentDoc, now: Date, shares: { what: string; ref: string; at: string; consentId: string }[]) => ({
+const consentView = (
+  consent: ConsentDoc,
+  now: Date,
+  shares: { what: string; ref: string; at: string; consentId: string }[],
+) => ({
   id: consent._id,
   applicationId: consent.applicationId,
   scopes: consent.scopes,
@@ -47,7 +51,9 @@ const consentView = (consent: ConsentDoc, now: Date, shares: { what: string; ref
   expiresAt: consent.expiresAt,
   revokedAt: consent.revokedAt,
   redeemed: consent.redeemedAt !== null,
-  shared: shares.filter((share) => share.consentId === consent._id).map(({ what, ref, at }) => ({ what, ref, at })),
+  shared: shares
+    .filter((share) => share.consentId === consent._id)
+    .map(({ what, ref, at }) => ({ what, ref, at })),
 });
 
 export const userRoutes = new Elysia({ name: "learnit-integration" })
@@ -65,22 +71,36 @@ export const userRoutes = new Elysia({ name: "learnit-integration" })
 
     const input = (body ?? {}) as { applicationId?: unknown; paths?: unknown; days?: unknown };
     const applicationId = typeof input.applicationId === "string" ? input.applicationId.trim() : "";
-    if (!applicationId || applicationId.length > 128) return fail(set, 400, "applicationId is required", "invalid_request");
+    if (!applicationId || applicationId.length > 128)
+      return fail(set, 400, "applicationId is required", "invalid_request");
 
     const requested = Array.isArray(input.paths) ? input.paths : [];
-    if (requested.some((id) => typeof id !== "string" || !/^[0-9a-f]{24}$/i.test(id)) || requested.length > 20) {
+    if (
+      requested.some((id) => typeof id !== "string" || !/^[0-9a-f]{24}$/i.test(id)) ||
+      requested.length > 20
+    ) {
       return fail(set, 400, "paths must be a list of path ids", "invalid_request");
     }
 
-    const days = typeof input.days === "number" && Number.isFinite(input.days) ? Math.floor(input.days) : config.consentDays();
-    if (days < 1 || days > config.maxConsentDays()) return fail(set, 400, `days must be between 1 and ${config.maxConsentDays()}`, "invalid_request");
+    const days =
+      typeof input.days === "number" && Number.isFinite(input.days)
+        ? Math.floor(input.days)
+        : config.consentDays();
+    if (days < 1 || days > config.maxConsentDays())
+      return fail(
+        set,
+        400,
+        `days must be between 1 and ${config.maxConsentDays()}`,
+        "invalid_request",
+      );
 
     const db = await getDB();
     // Sharing a path is opt-in per item, and only the applicant's own paths can be offered.
     const scope = forUser(db, user.id);
     const chosen = [...new Set(requested as string[])];
     for (const id of chosen) {
-      if (!(await scope.of("paths").findOne({ _id: new ObjectId(id) } as never))) return fail(set, 404, "path not found", "path_not_found");
+      if (!(await scope.of("paths").findOne({ _id: new ObjectId(id) } as never)))
+        return fail(set, 404, "path not found", "path_not_found");
     }
 
     const now = new Date();
@@ -117,7 +137,10 @@ export const userRoutes = new Elysia({ name: "learnit-integration" })
     if (!user) return fail(set, 401, "Unauthorized", "unauthorized");
     const db = await getDB();
     const now = new Date();
-    const [consents, shares] = await Promise.all([listConsents(db, user.id), sharesOf(db, user.id)]);
+    const [consents, shares] = await Promise.all([
+      listConsents(db, user.id),
+      sharesOf(db, user.id),
+    ]);
     consents.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     return { consents: consents.map((consent) => consentView(consent, now, shares)) };
   })
@@ -139,7 +162,10 @@ export const userRoutes = new Elysia({ name: "learnit-integration" })
     const user = await authenticate(headers);
     if (!user) return fail(set, 401, "Unauthorized", "unauthorized");
 
-    const code = typeof (body as { code?: unknown } | null)?.code === "string" ? (body as { code: string }).code.trim() : "";
+    const code =
+      typeof (body as { code?: unknown } | null)?.code === "string"
+        ? (body as { code: string }).code.trim()
+        : "";
     if (!code || code.length > 200) return fail(set, 400, "code is required", "invalid_request");
 
     const db = await getDB();
@@ -151,18 +177,28 @@ export const userRoutes = new Elysia({ name: "learnit-integration" })
     }
 
     // Already taken, or already claimed by someone else.
-    if (assessment.userId && assessment.userId !== user.id) return fail(set, 404, "that code is not valid", "invalid_code");
-    if (assessment.status === "completed") return fail(set, 409, "this assessment was already taken", "already_completed");
+    if (assessment.userId && assessment.userId !== user.id)
+      return fail(set, 404, "that code is not valid", "invalid_code");
+    if (assessment.status === "completed")
+      return fail(set, 409, "this assessment was already taken", "already_completed");
     if (assessment.status === "in_progress") {
-      return { id: assessment._id, subject: assessment.subject, level: assessment.level, topic: assessment.topic, questions: publicQuestions(assessment) };
+      return {
+        id: assessment._id,
+        subject: assessment.subject,
+        level: assessment.level,
+        topic: assessment.topic,
+        questions: publicQuestions(assessment),
+      };
     }
 
     // JobIt may have tied it to a consent at creation: that consent must be this applicant's and still active.
     let consentId = assessment.consentId;
     if (consentId) {
       const preset = await findConsentFor(db, user.id, consentId);
-      if (!preset) return fail(set, 403, "this assessment was requested for another account", "wrong_account");
-      if (consentState(preset, now) !== "active") return fail(set, 403, "that consent is no longer active", "consent_inactive");
+      if (!preset)
+        return fail(set, 403, "this assessment was requested for another account", "wrong_account");
+      if (consentState(preset, now) !== "active")
+        return fail(set, 403, "that consent is no longer active", "consent_inactive");
     } else {
       // Taking it is itself the applicant's consent to share the result with this application, and nothing else.
       consentId = newId();
@@ -184,7 +220,13 @@ export const userRoutes = new Elysia({ name: "learnit-integration" })
     if (!(await claimAssessment(db, assessment._id, user.id, consentId, now))) {
       return fail(set, 409, "this assessment was just claimed", "already_claimed");
     }
-    return { id: assessment._id, subject: assessment.subject, level: assessment.level, topic: assessment.topic, questions: publicQuestions(assessment) };
+    return {
+      id: assessment._id,
+      subject: assessment.subject,
+      level: assessment.level,
+      topic: assessment.topic,
+      questions: publicQuestions(assessment),
+    };
   })
 
   .post("/api/integration/assessments/:id/answers", async ({ params, body, headers, set }) => {
@@ -194,19 +236,27 @@ export const userRoutes = new Elysia({ name: "learnit-integration" })
     const db = await getDB();
     const now = new Date();
     const assessment = await findAssessment(db, params.id);
-    if (!assessment || assessment.userId !== user.id) return fail(set, 404, "not found", "not_found");
-    if (assessment.status === "completed") return fail(set, 409, "this assessment was already taken", "already_completed");
-    if (assessment.expiresAt <= now.toISOString()) return fail(set, 410, "this assessment has expired", "expired");
+    if (!assessment || assessment.userId !== user.id)
+      return fail(set, 404, "not found", "not_found");
+    if (assessment.status === "completed")
+      return fail(set, 409, "this assessment was already taken", "already_completed");
+    if (assessment.expiresAt <= now.toISOString())
+      return fail(set, 410, "this assessment has expired", "expired");
 
-    const consent = assessment.consentId ? await findConsentFor(db, user.id, assessment.consentId) : null;
-    if (!consent || consentState(consent, now) !== "active") return fail(set, 403, "that consent is no longer active", "consent_inactive");
+    const consent = assessment.consentId
+      ? await findConsentFor(db, user.id, assessment.consentId)
+      : null;
+    if (!consent || consentState(consent, now) !== "active")
+      return fail(set, 403, "that consent is no longer active", "consent_inactive");
 
     const raw = (body as { answers?: unknown } | null)?.answers;
-    if (!Array.isArray(raw) || raw.length > assessment.questions.length) return fail(set, 400, "answers must be a list", "invalid_request");
+    if (!Array.isArray(raw) || raw.length > assessment.questions.length)
+      return fail(set, 400, "answers must be a list", "invalid_request");
     const answers: SubmittedAnswer[] = [];
     for (const item of raw) {
       const entry = item as { q?: unknown; choice?: unknown; text?: unknown };
-      if (typeof entry?.q !== "number" || !Number.isInteger(entry.q)) return fail(set, 400, "each answer needs a question number", "invalid_request");
+      if (typeof entry?.q !== "number" || !Number.isInteger(entry.q))
+        return fail(set, 400, "each answer needs a question number", "invalid_request");
       answers.push({
         q: entry.q,
         choice: typeof entry.choice === "number" ? entry.choice : null,

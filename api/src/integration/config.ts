@@ -28,7 +28,8 @@ export const MINUTES_PER_EXERCISE = 2;
 /** 32 random bytes, base64url: codes, link ids, credential tokens. Only their sha256 is ever stored. */
 export const newToken = (): string => randomBytes(32).toString("base64url");
 
-export const sha256Hex = (value: string): string => createHash("sha256").update(value).digest("hex");
+export const sha256Hex = (value: string): string =>
+  createHash("sha256").update(value).digest("hex");
 
 export const newId = (): string => crypto.randomUUID();
 

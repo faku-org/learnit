@@ -41,7 +41,10 @@ export interface ConsentDoc {
 
 export type ConsentState = "active" | "revoked" | "expired";
 
-export const consentState = (consent: Pick<ConsentDoc, "revokedAt" | "expiresAt">, now = new Date()): ConsentState =>
+export const consentState = (
+  consent: Pick<ConsentDoc, "revokedAt" | "expiresAt">,
+  now = new Date(),
+): ConsentState =>
   consent.revokedAt ? "revoked" : consent.expiresAt <= now.toISOString() ? "expired" : "active";
 
 export async function insertConsent(db: DbLike, consent: ConsentDoc): Promise<void> {
@@ -49,19 +52,37 @@ export async function insertConsent(db: DbLike, consent: ConsentDoc): Promise<vo
 }
 
 export const listConsents = async (db: DbLike, userId: string): Promise<ConsentDoc[]> =>
-  (await forUser(db, userId).of("integration_consents").find({}).toArray()) as unknown as ConsentDoc[];
+  (await forUser(db, userId)
+    .of("integration_consents")
+    .find({})
+    .toArray()) as unknown as ConsentDoc[];
 
-export const findConsentFor = async (db: DbLike, userId: string, id: string): Promise<ConsentDoc | null> =>
-  (await forUser(db, userId).of("integration_consents").findOne({ _id: id } as never)) as unknown as ConsentDoc | null;
+export const findConsentFor = async (
+  db: DbLike,
+  userId: string,
+  id: string,
+): Promise<ConsentDoc | null> =>
+  (await forUser(db, userId)
+    .of("integration_consents")
+    .findOne({ _id: id } as never)) as unknown as ConsentDoc | null;
 
 export const findConsentById = async (db: DbLike, id: string): Promise<ConsentDoc | null> =>
-  (await db.collection(SERVICE_COLLECTIONS.consents).findOne({ _id: id } as never)) as unknown as ConsentDoc | null;
+  (await db
+    .collection(SERVICE_COLLECTIONS.consents)
+    .findOne({ _id: id } as never)) as unknown as ConsentDoc | null;
 
 export const findConsentByLink = async (db: DbLike, linkHash: string): Promise<ConsentDoc | null> =>
-  (await db.collection(SERVICE_COLLECTIONS.consents).findOne({ linkHash })) as unknown as ConsentDoc | null;
+  (await db
+    .collection(SERVICE_COLLECTIONS.consents)
+    .findOne({ linkHash })) as unknown as ConsentDoc | null;
 
 /** Revokes one consent of the user. False when it is not theirs or was already revoked. */
-export async function revokeConsent(db: DbLike, userId: string, id: string, now: Date): Promise<boolean> {
+export async function revokeConsent(
+  db: DbLike,
+  userId: string,
+  id: string,
+  now: Date,
+): Promise<boolean> {
   const result = await forUser(db, userId)
     .of("integration_consents")
     .updateOne({ _id: id, revokedAt: null } as never, { $set: { revokedAt: now.toISOString() } });
@@ -72,7 +93,12 @@ export async function revokeConsent(db: DbLike, userId: string, id: string, now:
  * One-time redemption: the code can be spent once, before it expires, and not after a revocation. The filter is
  * the lock, so two simultaneous redemptions cannot both win.
  */
-export async function redeemCode(db: DbLike, codeHash: string, linkHash: string, now: Date): Promise<ConsentDoc | null> {
+export async function redeemCode(
+  db: DbLike,
+  codeHash: string,
+  linkHash: string,
+  now: Date,
+): Promise<ConsentDoc | null> {
   const iso = now.toISOString();
   const col = db.collection(SERVICE_COLLECTIONS.consents);
   const result = await col.updateOne(
@@ -93,7 +119,9 @@ export interface ShareDoc {
 }
 
 export async function recordShare(db: DbLike, userId: string, share: ShareDoc): Promise<void> {
-  await forUser(db, userId).of("integration_shares").insertOne({ ...share });
+  await forUser(db, userId)
+    .of("integration_shares")
+    .insertOne({ ...share });
 }
 
 export const sharesOf = async (db: DbLike, userId: string): Promise<ShareDoc[]> =>
@@ -144,10 +172,17 @@ export async function insertAssessment(db: DbLike, doc: AssessmentDoc): Promise<
 }
 
 export const findAssessment = async (db: DbLike, id: string): Promise<AssessmentDoc | null> =>
-  (await db.collection(SERVICE_COLLECTIONS.assessments).findOne({ _id: id } as never)) as unknown as AssessmentDoc | null;
+  (await db
+    .collection(SERVICE_COLLECTIONS.assessments)
+    .findOne({ _id: id } as never)) as unknown as AssessmentDoc | null;
 
-export const findAssessmentByCode = async (db: DbLike, codeHash: string): Promise<AssessmentDoc | null> =>
-  (await db.collection(SERVICE_COLLECTIONS.assessments).findOne({ codeHash })) as unknown as AssessmentDoc | null;
+export const findAssessmentByCode = async (
+  db: DbLike,
+  codeHash: string,
+): Promise<AssessmentDoc | null> =>
+  (await db
+    .collection(SERVICE_COLLECTIONS.assessments)
+    .findOne({ codeHash })) as unknown as AssessmentDoc | null;
 
 /** Binds a pending assessment to the applicant. The filter makes the claim happen once. */
 export async function claimAssessment(
@@ -157,10 +192,11 @@ export async function claimAssessment(
   consentId: string,
   now: Date,
 ): Promise<boolean> {
-  const result = await db.collection(SERVICE_COLLECTIONS.assessments).updateOne(
-    { _id: id, status: "pending", userId: null } as never,
-    { $set: { status: "in_progress", userId, consentId, claimedAt: now.toISOString() } },
-  );
+  const result = await db
+    .collection(SERVICE_COLLECTIONS.assessments)
+    .updateOne({ _id: id, status: "pending", userId: null } as never, {
+      $set: { status: "in_progress", userId, consentId, claimedAt: now.toISOString() },
+    });
   return (result.modifiedCount ?? 0) > 0;
 }
 
@@ -173,15 +209,17 @@ export async function completeAssessment(
 ): Promise<boolean> {
   const done = await forUser(db, userId)
     .of("assessments")
-    .updateOne(
-      { _id: id, status: "in_progress" } as never,
-      { $set: { ...result, status: "completed", completedAt: now.toISOString() } },
-    );
+    .updateOne({ _id: id, status: "in_progress" } as never, {
+      $set: { ...result, status: "completed", completedAt: now.toISOString() },
+    });
   return (done.modifiedCount ?? 0) > 0;
 }
 
 /** Shared exercise bank rows for one subject leaf and level; everyone studying the subject draws from it. */
-export async function bankFor(db: DbLike, filter: { taxonomyLeaf: string; level?: string }): Promise<Doc[]> {
+export async function bankFor(
+  db: DbLike,
+  filter: { taxonomyLeaf: string; level?: string },
+): Promise<Doc[]> {
   return (await db.collection(SERVICE_COLLECTIONS.bank).find(filter).toArray()) as unknown as Doc[];
 }
 
@@ -203,23 +241,47 @@ export interface CredentialDoc {
   expiresAt: string;
 }
 
-export async function insertCredential(db: DbLike, userId: string, doc: CredentialDoc): Promise<void> {
+export async function insertCredential(
+  db: DbLike,
+  userId: string,
+  doc: CredentialDoc,
+): Promise<void> {
   await forUser(db, userId).of("assessment_credentials").insertOne(doc);
 }
 
 type OwnedCredential = CredentialDoc & { userId: string };
 
-export const findCredentialByToken = async (db: DbLike, tokenHash: string): Promise<OwnedCredential | null> =>
-  (await db.collection(SERVICE_COLLECTIONS.credentials).findOne({ tokenHash })) as unknown as OwnedCredential | null;
+export const findCredentialByToken = async (
+  db: DbLike,
+  tokenHash: string,
+): Promise<OwnedCredential | null> =>
+  (await db
+    .collection(SERVICE_COLLECTIONS.credentials)
+    .findOne({ tokenHash })) as unknown as OwnedCredential | null;
 
-export const findCredentialForAssessment = async (db: DbLike, assessmentId: string): Promise<OwnedCredential | null> =>
-  (await db.collection(SERVICE_COLLECTIONS.credentials).findOne({ assessmentId })) as unknown as OwnedCredential | null;
+export const findCredentialForAssessment = async (
+  db: DbLike,
+  assessmentId: string,
+): Promise<OwnedCredential | null> =>
+  (await db
+    .collection(SERVICE_COLLECTIONS.credentials)
+    .findOne({ assessmentId })) as unknown as OwnedCredential | null;
 
 export async function ensureIntegrationIndexes(db: Db): Promise<void> {
   await Promise.all([
     db.collection(SERVICE_COLLECTIONS.assessments).createIndex({ codeHash: 1 }, { unique: true }),
-    db.collection(SERVICE_COLLECTIONS.consents).createIndex({ codeHash: 1 }, { unique: true, partialFilterExpression: { codeHash: { $type: "string" } } }),
-    db.collection(SERVICE_COLLECTIONS.consents).createIndex({ linkHash: 1 }, { unique: true, partialFilterExpression: { linkHash: { $type: "string" } } }),
+    db
+      .collection(SERVICE_COLLECTIONS.consents)
+      .createIndex(
+        { codeHash: 1 },
+        { unique: true, partialFilterExpression: { codeHash: { $type: "string" } } },
+      ),
+    db
+      .collection(SERVICE_COLLECTIONS.consents)
+      .createIndex(
+        { linkHash: 1 },
+        { unique: true, partialFilterExpression: { linkHash: { $type: "string" } } },
+      ),
     db.collection(SERVICE_COLLECTIONS.consents).createIndex({ userId: 1 }),
     db.collection(SERVICE_COLLECTIONS.shares).createIndex({ userId: 1, consentId: 1 }),
     db.collection(SERVICE_COLLECTIONS.credentials).createIndex({ tokenHash: 1 }, { unique: true }),

@@ -2,7 +2,16 @@ import type { Db } from "mongodb";
 import { type AssessmentDoc, type AssessmentQuestion, bankFor } from "../db/integration";
 import { type StudentAnswer, answerKindFor, gradeDeterministic, gradingSpecOf } from "../grading";
 import { allNodes, matchSubject, slugify } from "../taxonomy";
-import { HOUR, MAX_QUESTIONS, MIN_QUESTIONS, addMs, config, newId, newToken, sha256Hex } from "./config";
+import {
+  HOUR,
+  MAX_QUESTIONS,
+  MIN_QUESTIONS,
+  addMs,
+  config,
+  newId,
+  newToken,
+  sha256Hex,
+} from "./config";
 
 /**
  * The standard LearnIt evaluation (ADR 0003): questions come from the shared exercise bank for a subject, an
@@ -29,7 +38,9 @@ export type CreateOutcome =
   | { ok: false; code: "unknown_subject" | "not_enough_questions"; available: number };
 
 const strings = (value: unknown): string[] | null =>
-  Array.isArray(value) && value.every((item) => typeof item === "string") ? (value as string[]) : null;
+  Array.isArray(value) && value.every((item) => typeof item === "string")
+    ? (value as string[])
+    : null;
 
 function shuffle<T>(items: T[]): T[] {
   const copy = [...items];
@@ -59,7 +70,10 @@ function questionFrom(row: Doc): AssessmentQuestion | null {
 }
 
 /** The taxonomy node a caller's `subject` means: an id, or a name or alias. */
-async function leafOf(db: DbLike, subject: string): Promise<{ leaf: string; name: string; taxonomy: string[] } | null> {
+async function leafOf(
+  db: DbLike,
+  subject: string,
+): Promise<{ leaf: string; name: string; taxonomy: string[] } | null> {
   const nodes = await allNodes(db as Db);
   const node = nodes.get(subject.trim().toLowerCase()) ?? (await matchSubject(db as Db, subject));
   if (!node) return null;
@@ -77,18 +91,30 @@ export async function createAssessment(
   input: NewAssessment,
   now = new Date(),
 ): Promise<CreateOutcome> {
-  const resolved = (await leafOf(db, input.subject)) ?? { leaf: slugify(input.subject), name: input.subject, taxonomy: [slugify(input.subject)] };
+  const resolved = (await leafOf(db, input.subject)) ?? {
+    leaf: slugify(input.subject),
+    name: input.subject,
+    taxonomy: [slugify(input.subject)],
+  };
   const level = input.level.trim().toLowerCase();
   const topic = input.topic?.trim() || null;
 
   const rows = await bankFor(db, { taxonomyLeaf: resolved.leaf, level });
   const pool = rows
-    .filter((row) => !topic || (typeof row.topic === "string" && row.topic.trim().toLowerCase() === topic.toLowerCase()))
+    .filter(
+      (row) =>
+        !topic ||
+        (typeof row.topic === "string" && row.topic.trim().toLowerCase() === topic.toLowerCase()),
+    )
     .map(questionFrom)
     .filter((question): question is AssessmentQuestion => question !== null);
 
   if (pool.length < MIN_QUESTIONS) {
-    return { ok: false, code: rows.length === 0 ? "unknown_subject" : "not_enough_questions", available: pool.length };
+    return {
+      ok: false,
+      code: rows.length === 0 ? "unknown_subject" : "not_enough_questions",
+      available: pool.length,
+    };
   }
 
   const code = newToken();
@@ -143,7 +169,10 @@ export interface Outcome {
 }
 
 /** Grades every question once. An unanswered question is a wrong one. */
-export function gradeAssessment(assessment: Pick<AssessmentDoc, "questions">, answers: SubmittedAnswer[]): Outcome {
+export function gradeAssessment(
+  assessment: Pick<AssessmentDoc, "questions">,
+  answers: SubmittedAnswer[],
+): Outcome {
   const byQuestion = new Map(answers.map((answer) => [answer.q, answer]));
   const failed = new Set<string>();
   let right = 0;

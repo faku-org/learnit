@@ -55,10 +55,13 @@ export function canonicalize(value: Json): string {
 type Bytes = Uint8Array<ArrayBuffer>;
 const bytes = (text: string): Bytes => new Uint8Array(new TextEncoder().encode(text));
 const fromBase64Url = (text: string): Bytes => new Uint8Array(Buffer.from(text, "base64url"));
-const toBase64Url = (data: ArrayBuffer | Uint8Array): string => Buffer.from(data instanceof Uint8Array ? data : new Uint8Array(data)).toString("base64url");
+const toBase64Url = (data: ArrayBuffer | Uint8Array): string =>
+  Buffer.from(data instanceof Uint8Array ? data : new Uint8Array(data)).toString("base64url");
 
 const keyId = async (x: string): Promise<string> =>
-  Buffer.from(await crypto.subtle.digest("SHA-256", fromBase64Url(x))).toString("hex").slice(0, 16);
+  Buffer.from(await crypto.subtle.digest("SHA-256", fromBase64Url(x)))
+    .toString("hex")
+    .slice(0, 16);
 
 interface KeyPair {
   privateKey: CryptoKey;
@@ -70,7 +73,15 @@ let cached: { source: string; pair: KeyPair } | null = null;
 
 /** PEM, or bare base64 / base64url, with or without literal `\n` escapes (an env var cannot hold a newline). */
 const pkcs8Of = (raw: string): Bytes =>
-  new Uint8Array(Buffer.from(raw.replace(/\\n/g, "\n").replace(/-----[^-]+-----/g, "").replace(/\s+/g, ""), "base64"));
+  new Uint8Array(
+    Buffer.from(
+      raw
+        .replace(/\\n/g, "\n")
+        .replace(/-----[^-]+-----/g, "")
+        .replace(/\s+/g, ""),
+      "base64",
+    ),
+  );
 
 async function rawKeySource(): Promise<string | null> {
   const file = process.env.LEARNIT_CREDENTIAL_KEY_FILE;
@@ -85,13 +96,19 @@ export async function credentialKeys(): Promise<KeyPair | null> {
   if (cached?.source === source) return cached.pair;
 
   try {
-    const privateKey = await crypto.subtle.importKey("pkcs8", pkcs8Of(source), "Ed25519", true, ["sign"]);
+    const privateKey = await crypto.subtle.importKey("pkcs8", pkcs8Of(source), "Ed25519", true, [
+      "sign",
+    ]);
     // A private Ed25519 JWK carries the public half in `x`.
     const { x } = (await crypto.subtle.exportKey("jwk", privateKey)) as { x?: string };
     if (!x) return null;
     const jwk = { kty: "OKP", crv: "Ed25519", x } as const;
     const publicKey = await crypto.subtle.importKey("jwk", jwk, "Ed25519", true, ["verify"]);
-    const pair: KeyPair = { privateKey, publicKey, document: { alg: "Ed25519", kid: await keyId(x), jwk } };
+    const pair: KeyPair = {
+      privateKey,
+      publicKey,
+      document: { alg: "Ed25519", kid: await keyId(x), jwk },
+    };
     cached = { source, pair };
     return pair;
   } catch {
@@ -133,10 +150,19 @@ export function payloadOf(input: CredentialInput, now: Date): CredentialPayload 
 export async function signCredential(payload: CredentialPayload): Promise<SignedCredential | null> {
   const keys = await credentialKeys();
   if (!keys) return null;
-  const signature = await crypto.subtle.sign("Ed25519", keys.privateKey, bytes(canonicalize(payload as unknown as Json)));
+  const signature = await crypto.subtle.sign(
+    "Ed25519",
+    keys.privateKey,
+    bytes(canonicalize(payload as unknown as Json)),
+  );
   return {
     credential: payload,
-    proof: { alg: "Ed25519", kid: keys.document.kid, canonicalization: "sorted-keys-json", signature: toBase64Url(signature) },
+    proof: {
+      alg: "Ed25519",
+      kid: keys.document.kid,
+      canonicalization: "sorted-keys-json",
+      signature: toBase64Url(signature),
+    },
   };
 }
 
@@ -161,4 +187,3 @@ export async function verifyCredential(
     return false;
   }
 }
-

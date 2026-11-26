@@ -87,8 +87,18 @@ export async function buildCatalog(db: Pick<Db, "collection">, now = new Date())
           effortMinutes: exerciseCount * MINUTES_PER_EXERCISE,
         };
       })
-      .sort((a, b) => LEVEL_ORDER.indexOf(a.level) - LEVEL_ORDER.indexOf(b.level) || a.level.localeCompare(b.level));
-    return { id: leaf, name, lineage: chain, breadcrumb: chain.map((link) => link.name).join(" / "), paths };
+      .sort(
+        (a, b) =>
+          LEVEL_ORDER.indexOf(a.level) - LEVEL_ORDER.indexOf(b.level) ||
+          a.level.localeCompare(b.level),
+      );
+    return {
+      id: leaf,
+      name,
+      lineage: chain,
+      breadcrumb: chain.map((link) => link.name).join(" / "),
+      paths,
+    };
   });
   subjects.sort((a, b) => a.breadcrumb.localeCompare(b.breadcrumb));
 
