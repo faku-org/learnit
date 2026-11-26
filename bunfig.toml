@@ -1,0 +1,6 @@
+[test]
+preload = ["./api/src/preload.ts", "./tests/setup.ts"]
+
+# @wefaber/* live on GitHub Packages. NPM_TOKEN: a token with read:packages.
+[install.scopes]
+"@wefaber" = { url = "https://npm.pkg.github.com/", token = "$NPM_TOKEN" }

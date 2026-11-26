@@ -11,9 +11,12 @@
     "preview": "astro preview",
     "astro": "astro",
     "api": "cd api && bun run --preload ./src/preload.ts src/index.ts",
-    "typecheck": "bunx tsc --noEmit",
-    "lint": "bunx oxlint src",
-    "format": "bunx oxfmt src"
+    "test": "bun test --timeout 20000",
+    "typecheck": "bunx tsc --noEmit && cd api && bunx tsc --noEmit",
+    "lint": "bunx oxlint src tests api/src scripts",
+    "format": "bunx oxfmt src",
+    "check:scoped": "bun scripts/check-scoped.ts",
+    "check": "bun run typecheck && bun run lint && bun run check:scoped && bun run test"
   },
   "dependencies": {
     "@astrojs/react": "^6.0.0",
@@ -26,6 +29,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "i18next": "^26.3.4",
+    "katex": "^0.18.1",
     "lucide-react": "^1.21.0",
     "motion": "^12.41.0",
     "postcss": "^8.5.15",
@@ -37,8 +41,16 @@
     "tailwindcss": "^4.3.1"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^7.0.0",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/jsdom": "^28.0.3",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
+    "@wefaber/accounts": "^0.1.0",
+    "bun-types": "^1.3.14",
+    "jsdom": "^30.0.1",
+    "msw": "^2.15.0",
     "oxfmt": "^0.56.0",
     "oxlint": "^1.71.0"
   }

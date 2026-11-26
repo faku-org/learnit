@@ -28,7 +28,7 @@ export function LessonSummary({ summary, nextTopicName, onClose }: Props) {
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 12 }}
           transition={{ duration: 0.25, ease: "easeOut" }}
-          className="w-full max-w-sm bg-card border border-border rounded-2xl p-6 space-y-5"
+          className="w-full max-w-md bg-card border border-border rounded-2xl p-6 space-y-5"
         >
           <div className="flex items-start justify-between">
             <div>

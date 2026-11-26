@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Volume2, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { translateText } from "@/lib/api";
+import { apiUrl, translateText } from "@/lib/api";
 import { useTranslation } from "react-i18next";
 import "@/lib/i18n";
 
@@ -23,7 +23,6 @@ export function toLangCode(lang: string): string {
   return LANG_CODES[lang.toLowerCase()] ?? lang.toLowerCase().slice(0, 2);
 }
 
-const API = `http://localhost:${import.meta.env.PUBLIC_API_PORT ?? 3001}`;
 
 // ── TTS audio cache ───────────────────────────────────────────────────────────
 
@@ -31,7 +30,7 @@ const audioCache = new Map<string, HTMLAudioElement>();
 let currentAudio: HTMLAudioElement | null = null;
 
 function ttsUrl(text: string, langCode: string) {
-  return `${API}/api/tts?text=${encodeURIComponent(text)}&lang=${encodeURIComponent(langCode)}`;
+  return apiUrl(`/api/tts?text=${encodeURIComponent(text)}&lang=${encodeURIComponent(langCode)}`);
 }
 
 export function preloadSpeech(text: string, langCode: string) {

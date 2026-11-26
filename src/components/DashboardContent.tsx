@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { getStreak, getCurrentPath, getStatsOverview, type StatsOverview as Overview } from "@/lib/api";
 import { AuthGuard } from "@/components/AuthGuard";
+import { subjectNameOf } from "@/lib/domains";
 import { StatsOverview } from "@/components/StatsOverview";
 import { useTranslation } from "react-i18next";
 import "@/lib/i18n";
@@ -19,7 +20,13 @@ const itemVariants = {
 };
 
 type PathModule = { name: string; description: string; order: number };
-type Path = { language: string; objective: string; modules: PathModule[] };
+type Path = {
+  subject?: string;
+  /** Present on paths created before the taxonomy work. */
+  language?: string;
+  objective: string;
+  modules: PathModule[];
+};
 type Streak = { currentStreak: number; longestStreak: number };
 
 function DashboardInner() {
@@ -85,7 +92,7 @@ function DashboardInner() {
             <CardContent className="flex flex-col gap-3 flex-1">
               {path ? (
                 <p className="text-muted-foreground text-sm">
-                  {path.language} &middot; {path.objective}
+                  {subjectNameOf(path)} &middot; {path.objective}
                 </p>
               ) : (
                 <p className="text-muted-foreground text-sm">{t("dashboard.noPathYet")}</p>

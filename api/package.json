@@ -4,12 +4,14 @@
   "version": "0.0.1",
   "scripts": {
     "dev": "bun run --preload ./src/preload.ts --watch src/index.ts",
-    "start": "bun run --preload ./src/preload.ts src/index.ts"
+    "start": "bun run --preload ./src/preload.ts src/index.ts",
+    "migrate": "bun run --preload ./src/preload.ts src/migrate-taxonomy.ts",
+    "migrate:accounts": "bun run --preload ./src/preload.ts src/accounts/migrate.ts"
   },
   "dependencies": {
     "@elysiajs/cors": "^1.2.0",
+    "@wefaber/accounts": "^0.1.0",
     "elysia": "^1.2.0",
-    "jose": "^6.2.3",
     "mongodb": "^7.3.0",
     "msedge-tts": "^2.0.6",
     "openai": "^6.44.0",

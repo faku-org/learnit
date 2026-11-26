@@ -35,6 +35,9 @@ LearnIt! is a full-stack language learning application. The frontend (Astro + Re
 
 ### Install
 
+`@wefaber/accounts` comes from GitHub Packages: export a token with `read:packages` first
+(`gh auth refresh -s read:packages`, then `export NPM_TOKEN=$(gh auth token)`).
+
 ```bash
 bun install
 cd api && bun install
@@ -44,8 +47,11 @@ cd api && bun install
 
 ```bash
 cp api/.env.example api/.env
-# Edit api/.env — set DEEPSEEK_API_KEY (and MONGO_URI / DB_NAME if needed)
+# Edit api/.env — set DEEPSEEK_API_KEY (and MONGO_URI / DB_NAME if needed).
+# For email and two-step sign-in also set LEARNIT_SECRET_KEY (openssl rand -hex 32).
 ```
+
+Accounts, sessions and isolation: see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ### Run
 

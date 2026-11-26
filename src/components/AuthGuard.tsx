@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Loader2 } from "lucide-react";
-import { isAuthenticated } from "@/lib/auth";
+import { isAuthenticated, loadSession } from "@/lib/auth";
 import { LoginModal } from "@/components/LoginModal";
 
 type Props = {
@@ -8,10 +8,17 @@ type Props = {
 };
 
 export function AuthGuard({ children }: Props) {
-  const [authed, setAuthed] = useState<boolean | null>(null);
+  const [authed, setAuthed] = useState<boolean | null>(isAuthenticated() ? true : null);
 
   useEffect(() => {
-    setAuthed(isAuthenticated());
+    let alive = true;
+    // Already known on this page: nothing to ask, nothing to flash.
+    loadSession().then((user) => {
+      if (alive) setAuthed(user !== null);
+    });
+    return () => {
+      alive = false;
+    };
   }, []);
 
   if (authed === null) {
@@ -23,7 +30,7 @@ export function AuthGuard({ children }: Props) {
   }
 
   if (!authed) {
-    return <LoginModal />;
+    return <LoginModal onSignedIn={() => setAuthed(true)} />;
   }
 
   return <>{children}</>;

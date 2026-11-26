@@ -1,0 +1,410 @@
+{
+  "language": {
+    "name": "Language",
+    "aliases": ["languages", "idioma", "idiomas"],
+    "children": {
+      "japanese": { "name": "Japanese", "aliases": ["japones", "japonés", "nihongo"] },
+      "german": { "name": "German", "aliases": ["aleman", "alemán", "deutsch"] },
+      "spanish": { "name": "Spanish", "aliases": ["espanol", "español", "castellano"] },
+      "french": { "name": "French", "aliases": ["frances", "francés", "francais"] },
+      "italian": { "name": "Italian", "aliases": ["italiano"] },
+      "portuguese": { "name": "Portuguese", "aliases": ["portugues", "portugués"] },
+      "mandarin": { "name": "Mandarin Chinese", "aliases": ["chinese", "chino", "putonghua"] },
+      "korean": { "name": "Korean", "aliases": ["coreano", "hangul"] },
+      "russian": { "name": "Russian", "aliases": ["ruso"] },
+      "arabic": { "name": "Arabic", "aliases": ["arabe", "árabe"] },
+      "dutch": { "name": "Dutch", "aliases": ["holandes", "nederlands"] },
+      "swedish": { "name": "Swedish", "aliases": ["sueco"] },
+      "polish": { "name": "Polish", "aliases": ["polaco"] },
+      "turkish": { "name": "Turkish", "aliases": ["turco"] },
+      "hindi": { "name": "Hindi" },
+      "english": { "name": "English", "aliases": ["ingles", "inglés"] },
+      "latin": { "name": "Latin", "aliases": ["latin language"] },
+      "ancient_greek": { "name": "Ancient Greek", "aliases": ["koine", "attic greek"] },
+      "hebrew": { "name": "Hebrew", "aliases": ["hebreo"] }
+    }
+  },
+
+  "formal_science": {
+    "name": "Formal Science",
+    "aliases": ["formal sciences"],
+    "children": {
+      "mathematics": {
+        "name": "Mathematics",
+        "aliases": ["math", "maths", "matematica", "matemática", "matematicas"],
+        "children": {
+          "calculus": { "name": "Calculus", "aliases": ["analysis", "calculo", "cálculo"] },
+          "linear_algebra": { "name": "Linear Algebra", "aliases": ["algebra lineal"] },
+          "probability": { "name": "Probability", "aliases": ["probabilidad"] },
+          "statistics": { "name": "Statistics", "aliases": ["estadistica", "estadística"] },
+          "discrete_mathematics": { "name": "Discrete Mathematics", "aliases": ["combinatorics"] },
+          "number_theory": { "name": "Number Theory", "aliases": ["teoria de numeros"] },
+          "real_analysis": { "name": "Real Analysis" },
+          "complex_analysis": { "name": "Complex Analysis" },
+          "abstract_algebra": { "name": "Abstract Algebra", "aliases": ["group theory"] },
+          "topology": { "name": "Topology" },
+          "differential_equations": { "name": "Differential Equations", "aliases": ["odes", "pdes"] },
+          "numerical_methods": { "name": "Numerical Methods", "aliases": ["numerical analysis"] },
+          "geometry": { "name": "Geometry", "aliases": ["geometria", "geometría"] }
+        }
+      },
+      "logic": {
+        "name": "Logic",
+        "aliases": ["logica", "lógica"],
+        "children": {
+          "propositional_logic": { "name": "Propositional Logic" },
+          "predicate_logic": { "name": "Predicate Logic", "aliases": ["first order logic"] },
+          "modal_logic": { "name": "Modal Logic" },
+          "proof_theory": { "name": "Proof Theory" }
+        }
+      },
+      "theoretical_cs": {
+        "name": "Theoretical Computer Science",
+        "children": {
+          "computability": { "name": "Computability Theory" },
+          "complexity_theory": { "name": "Complexity Theory" },
+          "information_theory": { "name": "Information Theory" }
+        }
+      }
+    }
+  },
+
+  "natural_science": {
+    "name": "Natural Science",
+    "aliases": ["natural sciences", "ciencias naturales"],
+    "children": {
+      "physics": {
+        "name": "Physics",
+        "aliases": ["fisica", "física"],
+        "children": {
+          "classical_mechanics": { "name": "Classical Mechanics", "aliases": ["newtonian mechanics"] },
+          "electromagnetism": { "name": "Electromagnetism", "aliases": ["electromagnetismo", "e&m"] },
+          "thermodynamics": { "name": "Thermodynamics", "aliases": ["termodinamica", "statistical mechanics"] },
+          "quantum_mechanics": { "name": "Quantum Mechanics", "aliases": ["quantum physics", "cuantica"] },
+          "relativity": { "name": "Relativity", "aliases": ["special relativity", "general relativity"] },
+          "optics": { "name": "Optics", "aliases": ["optica", "óptica"] },
+          "astrophysics": { "name": "Astrophysics" },
+          "particle_physics": { "name": "Particle Physics", "aliases": ["high energy physics"] },
+          "condensed_matter": { "name": "Condensed Matter Physics", "aliases": ["solid state"] },
+          "fluid_dynamics": { "name": "Fluid Dynamics", "aliases": ["fluid mechanics"] }
+        }
+      },
+      "chemistry": {
+        "name": "Chemistry",
+        "aliases": ["quimica", "química"],
+        "children": {
+          "general_chemistry": { "name": "General Chemistry" },
+          "organic_chemistry": { "name": "Organic Chemistry", "aliases": ["quimica organica"] },
+          "inorganic_chemistry": { "name": "Inorganic Chemistry" },
+          "physical_chemistry": { "name": "Physical Chemistry" },
+          "biochemistry": { "name": "Biochemistry", "aliases": ["bioquimica"] },
+          "analytical_chemistry": { "name": "Analytical Chemistry" }
+        }
+      },
+      "biology": {
+        "name": "Biology",
+        "aliases": ["biologia", "biología"],
+        "children": {
+          "cell_biology": { "name": "Cell Biology" },
+          "genetics": { "name": "Genetics", "aliases": ["genetica", "genética"] },
+          "evolution": { "name": "Evolutionary Biology", "aliases": ["evolucion"] },
+          "ecology": { "name": "Ecology", "aliases": ["ecologia"] },
+          "molecular_biology": { "name": "Molecular Biology" },
+          "neuroscience": { "name": "Neuroscience", "aliases": ["neurociencia"] },
+          "microbiology": { "name": "Microbiology" },
+          "physiology": { "name": "Physiology", "aliases": ["fisiologia"] }
+        }
+      },
+      "earth_science": {
+        "name": "Earth Science",
+        "children": {
+          "geology": { "name": "Geology", "aliases": ["geologia"] },
+          "meteorology": { "name": "Meteorology" },
+          "oceanography": { "name": "Oceanography" },
+          "climate_science": { "name": "Climate Science", "aliases": ["climatology"] }
+        }
+      },
+      "astronomy": {
+        "name": "Astronomy",
+        "aliases": ["astronomia", "astronomía"],
+        "children": {
+          "observational_astronomy": { "name": "Observational Astronomy" },
+          "cosmology": { "name": "Cosmology", "aliases": ["cosmologia"] },
+          "planetary_science": { "name": "Planetary Science" }
+        }
+      }
+    }
+  },
+
+  "social_science": {
+    "name": "Social Science",
+    "aliases": ["social sciences", "ciencias sociales"],
+    "children": {
+      "economics": {
+        "name": "Economics",
+        "aliases": ["economia", "economía"],
+        "children": {
+          "microeconomics": { "name": "Microeconomics", "aliases": ["micro", "microeconomia"] },
+          "macroeconomics": { "name": "Macroeconomics", "aliases": ["macro", "macroeconomia"] },
+          "econometrics": { "name": "Econometrics", "aliases": ["econometria"] },
+          "development_economics": { "name": "Development Economics" },
+          "behavioral_economics": { "name": "Behavioral Economics" },
+          "international_trade": { "name": "International Trade" },
+          "public_finance": { "name": "Public Finance" }
+        }
+      },
+      "psychology": {
+        "name": "Psychology",
+        "aliases": ["psicologia", "psicología"],
+        "children": {
+          "cognitive_psychology": { "name": "Cognitive Psychology" },
+          "social_psychology": { "name": "Social Psychology" },
+          "developmental_psychology": { "name": "Developmental Psychology" },
+          "clinical_psychology": { "name": "Clinical Psychology" },
+          "behavioral_neuroscience": { "name": "Behavioral Neuroscience" }
+        }
+      },
+      "sociology": {
+        "name": "Sociology",
+        "aliases": ["sociologia"],
+        "children": {
+          "social_theory": { "name": "Social Theory" },
+          "demography": { "name": "Demography" },
+          "criminology": { "name": "Criminology", "aliases": ["criminologia"] }
+        }
+      },
+      "political_science": {
+        "name": "Political Science",
+        "aliases": ["ciencia politica", "politics"],
+        "children": {
+          "political_theory": { "name": "Political Theory" },
+          "comparative_politics": { "name": "Comparative Politics" },
+          "international_relations": { "name": "International Relations", "aliases": ["relaciones internacionales"] },
+          "public_policy": { "name": "Public Policy" }
+        }
+      },
+      "law": {
+        "name": "Law",
+        "aliases": ["derecho", "legal studies"],
+        "children": {
+          "constitutional_law": { "name": "Constitutional Law", "aliases": ["derecho constitucional"] },
+          "criminal_law": { "name": "Criminal Law", "aliases": ["derecho penal"] },
+          "civil_law": { "name": "Civil Law", "aliases": ["derecho civil"] },
+          "international_law": { "name": "International Law" },
+          "contract_law": { "name": "Contract Law" }
+        }
+      },
+      "anthropology": {
+        "name": "Anthropology",
+        "aliases": ["antropologia"],
+        "children": {
+          "cultural_anthropology": { "name": "Cultural Anthropology" },
+          "archaeology": { "name": "Archaeology", "aliases": ["arqueologia"] }
+        }
+      },
+      "geography": {
+        "name": "Geography",
+        "aliases": ["geografia"],
+        "children": {
+          "human_geography": { "name": "Human Geography" },
+          "physical_geography": { "name": "Physical Geography" }
+        }
+      }
+    }
+  },
+
+  "humanities": {
+    "name": "Humanities",
+    "aliases": ["humanidades", "humanistico", "humanístico"],
+    "children": {
+      "history": {
+        "name": "History",
+        "aliases": ["historia"],
+        "children": {
+          "ancient_history": { "name": "Ancient History", "aliases": ["historia antigua", "antiquity"] },
+          "medieval_history": { "name": "Medieval History", "aliases": ["middle ages"] },
+          "early_modern_history": { "name": "Early Modern History" },
+          "modern_history": { "name": "Modern History", "aliases": ["historia moderna"] },
+          "contemporary_history": { "name": "Contemporary History" },
+          "military_history": { "name": "Military History" },
+          "economic_history": { "name": "Economic History" },
+          "history_of_science": { "name": "History of Science" }
+        }
+      },
+      "philosophy": {
+        "name": "Philosophy",
+        "aliases": ["filosofia", "filosofía"],
+        "children": {
+          "metaphysics": { "name": "Metaphysics", "aliases": ["metafisica"] },
+          "epistemology": { "name": "Epistemology", "aliases": ["epistemologia"] },
+          "ethics": { "name": "Ethics", "aliases": ["etica", "ética", "moral philosophy"] },
+          "political_philosophy": { "name": "Political Philosophy" },
+          "philosophy_of_mind": { "name": "Philosophy of Mind" },
+          "philosophy_of_science": { "name": "Philosophy of Science" },
+          "ancient_philosophy": { "name": "Ancient Philosophy", "aliases": ["greek philosophy"] },
+          "modern_philosophy": { "name": "Modern Philosophy" }
+        }
+      },
+      "literature": {
+        "name": "Literature",
+        "aliases": ["literatura"],
+        "children": {
+          "comparative_literature": { "name": "Comparative Literature" },
+          "poetry": { "name": "Poetry", "aliases": ["poesia"] },
+          "drama": { "name": "Drama", "aliases": ["teatro"] },
+          "novel_studies": { "name": "The Novel" },
+          "literary_theory": { "name": "Literary Theory" }
+        }
+      },
+      "classics": {
+        "name": "Classics",
+        "aliases": ["classical studies", "clasicas"],
+        "children": {
+          "greek_literature": { "name": "Greek Literature" },
+          "latin_literature": { "name": "Latin Literature" },
+          "classical_archaeology": { "name": "Classical Archaeology" },
+          "classical_philosophy": { "name": "Classical Philosophy" }
+        }
+      },
+      "art_history": {
+        "name": "Art History",
+        "aliases": ["historia del arte"],
+        "children": {
+          "renaissance_art": { "name": "Renaissance Art" },
+          "modern_art": { "name": "Modern Art" },
+          "architecture_history": { "name": "History of Architecture" }
+        }
+      },
+      "musicology": {
+        "name": "Musicology",
+        "children": {
+          "music_theory": { "name": "Music Theory", "aliases": ["teoria musical", "harmony"] },
+          "music_history": { "name": "Music History" }
+        }
+      },
+      "religious_studies": {
+        "name": "Religious Studies",
+        "children": {
+          "comparative_religion": { "name": "Comparative Religion" },
+          "theology": { "name": "Theology", "aliases": ["teologia"] },
+          "biblical_studies": { "name": "Biblical Studies" }
+        }
+      }
+    }
+  },
+
+  "computing": {
+    "name": "Computing",
+    "aliases": ["computer science", "informatica", "informática", "programming"],
+    "children": {
+      "programming": {
+        "name": "Programming",
+        "aliases": ["programacion", "programación", "coding"],
+        "children": {
+          "python": { "name": "Python" },
+          "typescript": { "name": "TypeScript", "aliases": ["javascript", "js", "ts"] },
+          "rust": { "name": "Rust" },
+          "go": { "name": "Go", "aliases": ["golang"] },
+          "c_programming": { "name": "C", "aliases": ["c++", "cpp"] },
+          "systems_programming": { "name": "Systems Programming" },
+          "functional_programming": { "name": "Functional Programming", "aliases": ["haskell", "ocaml"] }
+        }
+      },
+      "software_engineering": {
+        "name": "Software Engineering",
+        "children": {
+          "architecture": { "name": "Software Architecture" },
+          "testing": { "name": "Testing" },
+          "devops": { "name": "DevOps" },
+          "databases": { "name": "Databases", "aliases": ["sql", "bases de datos"] }
+        }
+      },
+      "computer_science": {
+        "name": "Computer Science",
+        "children": {
+          "algorithms": { "name": "Algorithms", "aliases": ["algoritmos"] },
+          "data_structures": { "name": "Data Structures", "aliases": ["estructuras de datos"] },
+          "operating_systems": { "name": "Operating Systems" },
+          "networking": { "name": "Computer Networking", "aliases": ["redes"] },
+          "compilers": { "name": "Compilers" },
+          "distributed_systems": { "name": "Distributed Systems" }
+        }
+      },
+      "ai_ml": {
+        "name": "AI and Machine Learning",
+        "aliases": ["ai", "ml", "inteligencia artificial"],
+        "children": {
+          "machine_learning": { "name": "Machine Learning" },
+          "deep_learning": { "name": "Deep Learning", "aliases": ["neural networks"] },
+          "nlp": { "name": "Natural Language Processing" },
+          "computer_vision": { "name": "Computer Vision" },
+          "reinforcement_learning": { "name": "Reinforcement Learning" }
+        }
+      },
+      "security": {
+        "name": "Security",
+        "aliases": ["ciberseguridad", "cybersecurity"],
+        "children": {
+          "cryptography": { "name": "Cryptography", "aliases": ["criptografia"] },
+          "network_security": { "name": "Network Security" },
+          "application_security": { "name": "Application Security" }
+        }
+      }
+    }
+  },
+
+  "practical": {
+    "name": "Practical Skills",
+    "aliases": ["skills", "habilidades"],
+    "children": {
+      "music_performance": {
+        "name": "Music Performance",
+        "children": {
+          "piano": { "name": "Piano" },
+          "guitar": { "name": "Guitar", "aliases": ["guitarra"] },
+          "music_reading": { "name": "Sight Reading" }
+        }
+      },
+      "games": {
+        "name": "Games and Strategy",
+        "children": {
+          "chess": { "name": "Chess", "aliases": ["ajedrez"] },
+          "go_game": { "name": "Go (Baduk)" },
+          "poker": { "name": "Poker" }
+        }
+      },
+      "crafts": {
+        "name": "Crafts",
+        "children": {
+          "cooking": { "name": "Cooking", "aliases": ["cocina"] },
+          "woodworking": { "name": "Woodworking" },
+          "photography": { "name": "Photography", "aliases": ["fotografia"] }
+        }
+      },
+      "business": {
+        "name": "Business",
+        "aliases": ["negocios"],
+        "children": {
+          "accounting": { "name": "Accounting", "aliases": ["contabilidad"] },
+          "marketing": { "name": "Marketing" },
+          "project_management": { "name": "Project Management" },
+          "finance": { "name": "Finance", "aliases": ["finanzas"] }
+        }
+      },
+      "health": {
+        "name": "Health",
+        "aliases": ["salud"],
+        "children": {
+          "nutrition": { "name": "Nutrition", "aliases": ["nutricion"] },
+          "anatomy": { "name": "Anatomy", "aliases": ["anatomia"] },
+          "first_aid": { "name": "First Aid" }
+        }
+      }
+    }
+  },
+
+  "general": {
+    "name": "General",
+    "aliases": ["other", "misc"]
+  }
+}

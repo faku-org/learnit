@@ -1,11 +1,26 @@
+// Language-family prompt builders.
+//
+// Everything in this file is the pre-existing language implementation and is
+// deliberately left byte-for-byte intact: the acceptance test for the taxonomy
+// refactor is that a language path produces exactly the prompts it produced
+// before. Non-language subjects route to prompts-general.ts instead, via
+// prompt-router.ts.
+
+import type {
+  CalibrationLevel,
+  CalibrationProbeLevel,
+  ExerciseType,
+  ModulePerformance,
+} from "./domains";
+
+export type { CalibrationLevel, CalibrationProbeLevel, ExerciseType, ModulePerformance };
+
 // --- Calibration ---
 export const CALIBRATION_SYSTEM_PROMPT = `You are a language teacher running an adaptive placement test.
 You generate one short stage of the test at a time, at the exact difficulty level requested.
 Each question must have exactly one unambiguously correct answer and no trick wording.
 Calibrate strictly to the requested level: an "elementary" stage must not contain "intermediate" content, and vice versa.
 Never reuse a word, phrase, or sentence that has already been tested in this session.`;
-
-export type CalibrationProbeLevel = "beginner" | "elementary" | "intermediate" | "advanced";
 
 export const CALIBRATION_PROBE_LEVELS: CalibrationProbeLevel[] = [
   "beginner",
@@ -167,8 +182,6 @@ Return ONLY valid JSON:
 }
 
 // --- Path Generation ---
-export type CalibrationLevel = "complete_beginner" | "some_basics" | "elementary" | "intermediate";
-
 const LEVEL_NOTES: Record<CalibrationLevel, string> = {
   complete_beginner:
     "The student is a complete beginner with no prior knowledge of {language}. Start from absolute zero: alphabet/script, greetings, and basic vocabulary.",
@@ -230,13 +243,6 @@ export const MODULE_TOPICS_SYSTEM_PROMPT = `You are an expert language teacher d
 You are given the module's theme, what the student has already covered, and how they have actually been performing.
 Adapt: if the student is struggling, slow the ramp and reinforce; if they are breezing through, raise the ceiling and add depth.
 Each topic must be a specific, teachable skill — not a vague theme.`;
-
-export type ModulePerformance = {
-  /** Fraction of exercises answered correctly across prior modules, 0–1. */
-  accuracy: number;
-  /** Number of exercises the accuracy is based on. */
-  answered: number;
-};
 
 export function describePerformance(perf: ModulePerformance | null): string {
   if (!perf || perf.answered < 5) {
@@ -416,14 +422,27 @@ CRITICAL: The exercise content — sentences, words, questions, and answer optio
 the target language being studied. Do NOT write the exercise in English unless the task is
 explicitly to translate FROM English into the target language.`;
 
-export type ExerciseType =
+/** The seven types the language family generates. A subset of ExerciseType. */
+export type LanguageExerciseType = Extract<
+  ExerciseType,
   | "multiple_choice"
   | "fill_blank"
   | "translation"
   | "conjugation"
   | "matching"
   | "reading_comprehension"
-  | "word_order";
+  | "word_order"
+>;
+
+export const LANGUAGE_EXERCISE_TYPES: LanguageExerciseType[] = [
+  "multiple_choice",
+  "fill_blank",
+  "translation",
+  "conjugation",
+  "matching",
+  "reading_comprehension",
+  "word_order",
+];
 
 export type WordMeaning = {
   word: string;
@@ -435,7 +454,7 @@ export function buildExercisePrompt(
   language: string,
   level: string,
   topic: string,
-  type: ExerciseType,
+  type: LanguageExerciseType,
   nativeLanguage = "english",
   difficultyNote?: string,
 ): string {
@@ -451,7 +470,7 @@ export function buildExercisePrompt(
 
   const wordMeaningsNote = `For "wordMeanings": include 3–6 key vocabulary items (nouns, verbs, adjectives) from the target-language text shown to the student. Use the exact form as written in the text, plus the base/infinitive form, plus the contextual meaning in ${N}. Skip particles, articles, and trivial words unless they are the learning focus.`;
 
-  const typeInstructions: Record<ExerciseType, string> = {
+  const typeInstructions: Record<LanguageExerciseType, string> = {
     multiple_choice: `Create a multiple choice question that tests ${language} knowledge.
 The question and all options must be in ${language}.
 Return JSON:

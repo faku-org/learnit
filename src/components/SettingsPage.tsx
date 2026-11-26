@@ -7,6 +7,7 @@ import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { getPaths, deletePath, updatePreferences, getPreferences } from "@/lib/api";
 import { toast } from "sonner";
 import { AuthGuard } from "@/components/AuthGuard";
+import { AccountCard } from "@/components/AccountCard";
 import { useTranslation } from "react-i18next";
 import "@/lib/i18n";
 
@@ -180,6 +181,11 @@ function SettingsInner() {
             </div>
           </CardContent>
         </Card>
+      </motion.div>
+
+      {/* Account */}
+      <motion.div variants={itemVariants} className="mb-8">
+        <AccountCard />
       </motion.div>
 
       {/* Learning paths */}

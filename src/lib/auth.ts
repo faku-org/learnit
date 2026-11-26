@@ -1,43 +1,48 @@
-const TOKEN_KEY = "learnit_token";
-const USER_KEY = "learnit_user";
+import { type AccountUser, getMe } from "./api";
 
-export type AuthUser = {
-  userId: string;
-  email: string;
-};
+/**
+ * Who is signed in, as far as this page knows.
+ *
+ * The session itself is an HttpOnly cookie the page cannot read, so the only way to know is to ask the API
+ * (`GET /api/me`). The answer is kept in memory for the life of the page and never persisted: nothing about the
+ * session lives in `localStorage`.
+ */
+let current: AccountUser | null = null;
 
-export function getToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem(TOKEN_KEY);
-}
-
-export function getUser(): AuthUser | null {
-  if (typeof window === "undefined") return null;
-  const raw = localStorage.getItem(USER_KEY);
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as AuthUser;
-  } catch {
-    return null;
-  }
-}
-
-export function setSession(token: string, user: AuthUser): void {
-  localStorage.setItem(TOKEN_KEY, token);
-  localStorage.setItem(USER_KEY, JSON.stringify(user));
-}
-
-export function clearSession(): void {
-  localStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem(USER_KEY);
+export function getUser(): AccountUser | null {
+  return current;
 }
 
 export function isAuthenticated(): boolean {
-  return getToken() !== null;
+  return current !== null;
 }
 
-export function getAuthHeaders(): Record<string, string> {
-  const token = getToken();
-  if (!token) return {};
-  return { Authorization: `Bearer ${token}` };
+export function setSession(user: AccountUser): void {
+  current = user;
+}
+
+export function clearSession(): void {
+  current = null;
+}
+
+/** Keys the JWT flow left behind. They are removed on sight: a stale token is a credential at rest. */
+function purgeLegacyStorage(): void {
+  try {
+    localStorage.removeItem("learnit_token");
+    localStorage.removeItem("learnit_user");
+  } catch {
+    // Storage can be blocked; there is nothing to purge then.
+  }
+}
+
+/** Asks the API who the cookie belongs to. `null` when there is no valid session. */
+export async function loadSession(): Promise<AccountUser | null> {
+  purgeLegacyStorage();
+  if (current) return current;
+  try {
+    current = (await getMe()).user;
+  } catch {
+    current = null;
+  }
+  return current;
 }

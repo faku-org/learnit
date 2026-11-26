@@ -29,7 +29,8 @@
       "swedish": "Sueco",
       "polish": "Polaco",
       "turkish": "Turco"
-    }
+    },
+    "done": "Listo"
   },
   "sidebar": {
     "brand": "LearnIt!",
@@ -44,7 +45,29 @@
   "auth": {
     "signInTitle": "Inicia sesión para continuar",
     "signInBody": "Tu progreso y ejercicios se guardan en tu cuenta.",
-    "continueWithGoogle": "Continuar con Google"
+    "continueWithGoogle": "Continuar con Google",
+    "genericError": "Algo salió mal. Probá de nuevo.",
+    "registerTitle": "Creá tu cuenta",
+    "registerBody": "Elegí un usuario y una contraseña. Tu progreso es solo tuyo.",
+    "totpTitle": "Ingresá tu código",
+    "totpBody": "Abrí tu app de autenticación y escribí el código de 6 dígitos.",
+    "recoverTitle": "Usar un código de recuperación",
+    "recoverBody": "Cada código de recuperación sirve una sola vez.",
+    "codesTitle": "Guardá tus códigos de recuperación",
+    "codesBody": "Se muestran solo ahora. Guardalos en un lugar seguro: cada uno te deja entrar una vez si perdés el acceso.",
+    "codesSaved": "Ya los guardé",
+    "handle": "Usuario",
+    "displayName": "Nombre visible",
+    "password": "Contraseña",
+    "passwordHint": "Al menos 10 caracteres, combinando al menos dos tipos.",
+    "totpCode": "Código de 6 dígitos",
+    "recoveryCode": "Código de recuperación",
+    "createAccount": "Crear cuenta",
+    "signIn": "Entrar",
+    "continue": "Continuar",
+    "haveAccount": "Ya tengo cuenta",
+    "noAccount": "Crear una cuenta",
+    "useRecoveryCode": "Usar un código de recuperación"
   },
   "feedback": {
     "title": "¿Qué tal los ejercicios?",
@@ -110,24 +133,29 @@
     "createNewPath": "Crear nuevo camino",
     "newPath": "Nuevo Camino",
     "learningGoal": "Objetivo de Aprendizaje",
-    "languageLabel": "Idioma",
-    "languagePlaceholder": "ej., japonés, francés, alemán",
     "objectiveLabel": "Objetivo",
-    "objectivePlaceholder": "ej., mantener conversaciones básicas para viajar",
+    "objectivePlaceholder": "ej., Entender cómo los bancos centrales fijan las tasas de interés",
     "timeframeLabel": "Plazo",
-    "timeframePlaceholder": "ej., 3 meses, 6 meses",
     "generating": "Generando...",
     "continueBtn": "Continuar",
-    "calibrationTitle": "Calibración — {{language}}",
+    "calibrationTitle": "Calibrando tu nivel de {{subject}}",
     "modulesAndTopics": "{{modules}} módulos · {{topics}} temas",
-    "pathTitle": "Camino de {{language}}",
-    "toastLangObjectiveRequired": "El idioma y el objetivo son obligatorios",
+    "pathTitle": "Tu ruta de {{subject}}",
     "toastActiveUpdated": "Camino activo actualizado",
     "toastUpdateActiveError": "No se pudo actualizar el camino activo",
     "toastPathDeleted": "Camino eliminado",
     "toastDeleteError": "No se pudo eliminar el camino",
     "toastPathGenerated": "¡Camino de aprendizaje generado!",
-    "toastGenerateError": "No se pudo generar el camino"
+    "toastGenerateError": "No se pudo generar el camino",
+    "subjectLabel": "¿Qué querés aprender?",
+    "subjectPlaceholder": "Japonés, Macroeconomía, Mecánica Cuántica, Historia Romana...",
+    "toastSubjectObjectiveRequired": "La materia y el objetivo son obligatorios",
+    "preparing": "Preparando...",
+    "timeframe1Month": "1 mes",
+    "timeframe3Months": "3 meses",
+    "timeframe6Months": "6 meses",
+    "timeframe1Year": "1 año",
+    "timeframeOpen": "Sin fecha"
   },
   "vocabulary": {
     "title": "Vocabulario",
@@ -168,7 +196,33 @@
     "noMatches": "Ningún ejercicio coincide con tus filtros.",
     "noneYet": "Aún no hay ejercicios. Empieza a practicar para construir tu historial.",
     "answerLabel": "Respuesta: ",
-    "pageOf": "Página {{page}} de {{total}}"
+    "pageOf": "Página {{page}} de {{total}}",
+    "typeCloze": "Completa el concepto",
+    "typeShortAnswer": "Respuesta breve",
+    "typeOrdering": "Ordenar",
+    "typeFlashcard": "Tarjeta",
+    "typeNumeric": "Respuesta numérica",
+    "typeSymbolic": "Respuesta simbólica",
+    "typeDerivationOrder": "Ordena la derivación",
+    "typePlotReading": "Lee la gráfica",
+    "typeUnitConversion": "Conversión de unidades",
+    "typeSourceAnalysis": "Análisis de fuente",
+    "typeChronology": "Cronología",
+    "typeArgumentReconstruction": "Reconstruye el argumento",
+    "typeCompareContrast": "Compara y contrasta",
+    "typeCodeOutput": "Predice la salida",
+    "typeCodeFix": "Corrige el error",
+    "typeComplexity": "Complejidad"
+  },
+  "blocks": {
+    "showTranslation": "Ver traducción",
+    "hideTranslation": "Ocultar traducción",
+    "viewSource": "Ver fuente",
+    "unverified": "Cita sin verificar",
+    "unverifiedHint": "Esta atribución todavía no se ha comprobado contra una base de fuentes.",
+    "verifiedVia": "Verificado en {{provider}}",
+    "machineTranslation": "Traducción automática de un original verificado",
+    "citationOnly": "La obra está verificada, pero no se pudo localizar este pasaje en ella. Sigue el enlace para leerla en su contexto."
   },
   "speak": {
     "title": "Hablar",
@@ -211,7 +265,7 @@
     "gradingFailed": "No se pudo obtener la retroalimentación de esa conversación."
   },
   "calibration": {
-    "personalize": "Algunas preguntas rápidas para personalizar tu camino de {{language}}.",
+    "personalize": "Unas preguntas rápidas para personalizar tu ruta de {{subject}}",
     "whyLearning": "¿Por qué lo estás aprendiendo?",
     "motivationTravel": "Viajes y turismo",
     "motivationWork": "Trabajo o estudios",
@@ -222,12 +276,12 @@
     "dailyTime15_30": "15–30 min / día",
     "dailyTime30_60": "30–60 min / día",
     "dailyTime60Plus": "1 hora+ / día",
-    "priorExposureQuestion": "¿Experiencia previa con {{language}}?",
+    "priorExposureQuestion": "¿Cuánto sabés ya de {{subject}}?",
     "priorNone": "Nunca lo estudié",
     "priorLittle": "Algunas palabras o frases",
     "priorSome": "Básico (saludos, números, colores)",
     "priorMore": "Oraciones simples y conversaciones",
-    "selfRatingQuestion": "Sé honesto — ¿cómo calificarías tu nivel de {{language}}?",
+    "selfRatingQuestion": "¿Cómo calificarías tu nivel en {{subject}}?",
     "selfRatingPoor": "No muy bien, sinceramente",
     "selfRatingOkay": "Más o menos, me las arreglo",
     "selfRatingGood": "Bastante bien",
@@ -266,22 +320,35 @@
     "levels": {
       "completeBeginner": {
         "label": "Principiante Total",
-        "description": "Tu camino empieza desde cero: alfabeto, frases básicas y vocabulario esencial."
+        "description": "Tu camino empieza desde cero: alfabeto, frases básicas y vocabulario esencial.",
+        "descriptionGeneral": "Tu ruta empieza desde cero: los objetos centrales del campo y el vocabulario para hablar de ellos."
       },
       "someBasics": {
         "label": "Algunas Bases",
-        "description": "Ya sabes algunas cosas. Tu camino se salta lo más básico y se enfoca en construir estructura."
+        "description": "Ya sabes algunas cosas. Tu camino se salta lo más básico y se enfoca en construir estructura.",
+        "descriptionGeneral": "Sabés algunas cosas. Tu ruta saltea las introducciones y se enfoca en convertir los fragmentos en una estructura."
       },
       "elementary": {
         "label": "Elemental",
-        "description": "Base sólida. Tu camino avanza hacia patrones gramaticales y oraciones prácticas."
+        "description": "Base sólida. Tu camino avanza hacia patrones gramaticales y oraciones prácticas.",
+        "descriptionGeneral": "Base sólida. Tu ruta va directo a la maquinaria de trabajo del tema."
       },
       "intermediate": {
         "label": "Intermedio",
-        "description": "Ya tienes las bases. Tu camino se enfoca en fluidez y estructuras complejas."
+        "description": "Ya tienes las bases. Tu camino se enfoca en fluidez y estructuras complejas.",
+        "descriptionGeneral": "Ya tenés fundamentos. Tu ruta se enfoca en profundidad, síntesis y los casos más difíciles."
       }
     },
-    "toastQuizError": "No se pudieron generar las preguntas de calibración. Intenta de nuevo."
+    "toastQuizError": "No se pudieron generar las preguntas de calibración. Intenta de nuevo.",
+    "motivationExam": "Un examen o certificación",
+    "motivationCareer": "Trabajo o carrera",
+    "motivationCourse": "Una materia que estoy cursando",
+    "motivationCuriosity": "Curiosidad, quiero entenderlo",
+    "priorNoneGeneral": "Nunca lo estudié",
+    "priorLittleGeneral": "Leí algo suelto sobre el tema",
+    "priorSomeGeneral": "Conozco las ideas y el vocabulario básico",
+    "priorMoreGeneral": "Hice un curso o lo usé en la práctica",
+    "selfRatingGreatGeneral": "Muy bien / podría explicarlo"
   },
   "roadmap": {
     "pathSuffix": "camino de {{language}}",
@@ -329,6 +396,51 @@
     "moduleDesignFailed": "No se pudo diseñar {{module}}",
     "yourNextModule": "tu próximo módulo",
     "moduleDesigningDesc": "Este módulo se está escribiendo en base a cómo te ha estado yendo, para que quede en la dificultad justa.",
-    "moduleDesignFailedDesc": "El plan de esta lección no se pudo generar. Intenta de nuevo."
+    "moduleDesignFailedDesc": "El plan de esta lección no se pudo generar. Intenta de nuevo.",
+    "checkingAnswer": "Revisando tu respuesta...",
+    "mathInputPlaceholder": "Escribe tu respuesta en LaTeX. Pulsa \\ o / para ver comandos.",
+    "mathInputHint": "Tu respuesta aparece aquí mientras escribes",
+    "explainAnswerPlaceholder": "Explica tu razonamiento en dos o tres frases"
+  },
+  "taxonomy": {
+    "placedIn": "Área:",
+    "change": "Cambiar área",
+    "pickArea": "Elegí el área a la que pertenece",
+    "newArea": "Área nueva, agregada para esta materia.",
+    "uncertain": "Es una estimación. Cambiala si no es correcta."
+  },
+  "scoping": {
+    "cardTitle": "Acotando {{subject}}",
+    "titleBroad": "Es un tema muy amplio",
+    "titleNarrow": "Es bastante específico",
+    "orDescribe": "O describilo vos mismo",
+    "suggested": "Objetivo sugerido",
+    "continue": "Continuar",
+    "keepAsIs": "Dejarlo así"
+  },
+  "account": {
+    "title": "Cuenta",
+    "signedInAs": "Sesión iniciada como {{handle}}",
+    "signOut": "Cerrar sesión",
+    "twoFactor": "Verificación en dos pasos",
+    "twoFactorOn": "Activada. Al entrar se pide un código de tu app de autenticación.",
+    "twoFactorOff": "Desactivada. Sumá un segundo paso con una app de autenticación.",
+    "twoFactorUnavailable": "No disponible en este servidor.",
+    "enableTwoFactor": "Activar",
+    "disableTwoFactor": "Desactivar",
+    "secretLabel": "Agregá esta clave a tu app de autenticación y escribí un código para confirmar:",
+    "confirmCode": "Código de 6 dígitos",
+    "confirm": "Confirmar",
+    "passwordLabel": "Tu contraseña",
+    "recoveryLeft_one": "Queda {{count}} código de recuperación",
+    "recoveryLeft_other": "Quedan {{count}} códigos de recuperación",
+    "deleteTitle": "Eliminar cuenta",
+    "deleteBody": "Esto borra tu cuenta y todo lo que hiciste acá: rutas, respuestas, vocabulario, progreso. No se puede deshacer.",
+    "deleteConfirm": "Escribí tu usuario ({{handle}}) para confirmar",
+    "deleteButton": "Eliminar mi cuenta",
+    "toastDeleted": "Cuenta eliminada",
+    "toastError": "No se pudo completar.",
+    "toast2faOn": "Verificación en dos pasos activada",
+    "toast2faOff": "Verificación en dos pasos desactivada"
   }
 }

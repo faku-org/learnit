@@ -29,7 +29,8 @@
       "swedish": "Swedish",
       "polish": "Polish",
       "turkish": "Turkish"
-    }
+    },
+    "done": "Done"
   },
   "sidebar": {
     "brand": "LearnIt!",
@@ -44,7 +45,29 @@
   "auth": {
     "signInTitle": "Sign in to continue",
     "signInBody": "Your progress and exercises are saved to your account.",
-    "continueWithGoogle": "Continue with Google"
+    "continueWithGoogle": "Continue with Google",
+    "genericError": "Something went wrong. Try again.",
+    "registerTitle": "Create your account",
+    "registerBody": "Pick a handle and a password. Your progress stays private to you.",
+    "totpTitle": "Enter your code",
+    "totpBody": "Open your authenticator app and type the 6-digit code.",
+    "recoverTitle": "Use a recovery code",
+    "recoverBody": "Each recovery code works once.",
+    "codesTitle": "Save your recovery codes",
+    "codesBody": "These are shown only now. Keep them somewhere safe: each one signs you in once if you lose access.",
+    "codesSaved": "I saved them",
+    "handle": "Handle",
+    "displayName": "Display name",
+    "password": "Password",
+    "passwordHint": "At least 10 characters, mixing at least two kinds.",
+    "totpCode": "6-digit code",
+    "recoveryCode": "Recovery code",
+    "createAccount": "Create account",
+    "signIn": "Sign in",
+    "continue": "Continue",
+    "haveAccount": "I already have an account",
+    "noAccount": "Create an account",
+    "useRecoveryCode": "Use a recovery code"
   },
   "feedback": {
     "title": "How are the exercises?",
@@ -110,24 +133,29 @@
     "createNewPath": "Create new path",
     "newPath": "New Path",
     "learningGoal": "Learning Goal",
-    "languageLabel": "Language",
-    "languagePlaceholder": "e.g., Japanese, French, German",
     "objectiveLabel": "Objective",
-    "objectivePlaceholder": "e.g., Hold basic conversations for travel",
+    "objectivePlaceholder": "e.g., Understand how central banks set interest rates",
     "timeframeLabel": "Timeframe",
-    "timeframePlaceholder": "e.g., 3 months, 6 months",
     "generating": "Generating...",
     "continueBtn": "Continue",
-    "calibrationTitle": "Calibration — {{language}}",
+    "calibrationTitle": "Calibrating your {{subject}} level",
     "modulesAndTopics": "{{modules}} modules · {{topics}} topics",
-    "pathTitle": "{{language}} Path",
-    "toastLangObjectiveRequired": "Language and objective are required",
+    "pathTitle": "Your {{subject}} path",
     "toastActiveUpdated": "Active path updated",
     "toastUpdateActiveError": "Failed to update active path",
     "toastPathDeleted": "Path deleted",
     "toastDeleteError": "Failed to delete path",
     "toastPathGenerated": "Learning path generated!",
-    "toastGenerateError": "Failed to generate path"
+    "toastGenerateError": "Failed to generate path",
+    "subjectLabel": "What do you want to learn?",
+    "subjectPlaceholder": "Japanese, Macroeconomics, Quantum Mechanics, Roman History...",
+    "toastSubjectObjectiveRequired": "Subject and objective are required",
+    "preparing": "Preparing...",
+    "timeframe1Month": "1 month",
+    "timeframe3Months": "3 months",
+    "timeframe6Months": "6 months",
+    "timeframe1Year": "1 year",
+    "timeframeOpen": "No deadline"
   },
   "vocabulary": {
     "title": "Vocabulary",
@@ -168,7 +196,33 @@
     "noMatches": "No exercises match your filters.",
     "noneYet": "No exercises yet. Start practicing to build your history.",
     "answerLabel": "Answer: ",
-    "pageOf": "Page {{page}} of {{total}}"
+    "pageOf": "Page {{page}} of {{total}}",
+    "typeCloze": "Fill in the concept",
+    "typeShortAnswer": "Short answer",
+    "typeOrdering": "Put in order",
+    "typeFlashcard": "Flashcard",
+    "typeNumeric": "Numeric answer",
+    "typeSymbolic": "Symbolic answer",
+    "typeDerivationOrder": "Order the derivation",
+    "typePlotReading": "Read the plot",
+    "typeUnitConversion": "Unit conversion",
+    "typeSourceAnalysis": "Source analysis",
+    "typeChronology": "Chronology",
+    "typeArgumentReconstruction": "Reconstruct the argument",
+    "typeCompareContrast": "Compare and contrast",
+    "typeCodeOutput": "Predict the output",
+    "typeCodeFix": "Fix the bug",
+    "typeComplexity": "Complexity"
+  },
+  "blocks": {
+    "showTranslation": "Show translation",
+    "hideTranslation": "Hide translation",
+    "viewSource": "View source",
+    "unverified": "Unverified citation",
+    "unverifiedHint": "This attribution has not been checked against a source database yet.",
+    "verifiedVia": "Verified via {{provider}}",
+    "machineTranslation": "Machine translation of a verified original",
+    "citationOnly": "The work is verified, but this passage could not be located in it. Follow the link to read it in context."
   },
   "speak": {
     "title": "Speak",
@@ -211,7 +265,7 @@
     "gradingFailed": "Couldn't get feedback for that conversation."
   },
   "calibration": {
-    "personalize": "A few quick questions to personalize your {{language}} path.",
+    "personalize": "A few quick questions to personalize your {{subject}} path",
     "whyLearning": "Why are you learning?",
     "motivationTravel": "Travel & tourism",
     "motivationWork": "Work or studies",
@@ -222,12 +276,12 @@
     "dailyTime15_30": "15–30 min / day",
     "dailyTime30_60": "30–60 min / day",
     "dailyTime60Plus": "1 hour+ / day",
-    "priorExposureQuestion": "Prior exposure to {{language}}?",
+    "priorExposureQuestion": "How much {{subject}} do you already know?",
     "priorNone": "Never studied it",
     "priorLittle": "A few words/phrases",
     "priorSome": "Basics (greetings, numbers, colors)",
     "priorMore": "Simple sentences and conversations",
-    "selfRatingQuestion": "Be honest — how would you rate your {{language}}?",
+    "selfRatingQuestion": "How would you rate yourself in {{subject}}?",
     "selfRatingPoor": "Not good, honestly",
     "selfRatingOkay": "Okay, I get by",
     "selfRatingGood": "Pretty good",
@@ -266,22 +320,35 @@
     "levels": {
       "completeBeginner": {
         "label": "Complete Beginner",
-        "description": "Your path starts from zero — alphabet, basic phrases, and core vocabulary."
+        "description": "Your path starts from zero — alphabet, basic phrases, and core vocabulary.",
+        "descriptionGeneral": "Your path starts from zero — the core objects of the field and the vocabulary to talk about them."
       },
       "someBasics": {
         "label": "Some Basics",
-        "description": "You know a few things. Your path skips absolute basics and focuses on building structure."
+        "description": "You know a few things. Your path skips absolute basics and focuses on building structure.",
+        "descriptionGeneral": "You know a few things. Your path skips the introductions and focuses on turning fragments into a structure."
       },
       "elementary": {
         "label": "Elementary",
-        "description": "Solid foundation. Your path jumps into grammar patterns and practical sentences."
+        "description": "Solid foundation. Your path jumps into grammar patterns and practical sentences.",
+        "descriptionGeneral": "Solid foundation. Your path moves straight into the working machinery of the subject."
       },
       "intermediate": {
         "label": "Intermediate",
-        "description": "You already have foundations. Your path focuses on fluency and complex structures."
+        "description": "You already have foundations. Your path focuses on fluency and complex structures.",
+        "descriptionGeneral": "You already have foundations. Your path focuses on depth, synthesis, and the harder cases."
       }
     },
-    "toastQuizError": "Failed to generate calibration questions. Try again."
+    "toastQuizError": "Failed to generate calibration questions. Try again.",
+    "motivationExam": "An exam or certification",
+    "motivationCareer": "Work or career",
+    "motivationCourse": "A course I'm taking",
+    "motivationCuriosity": "Curiosity, I want to understand it",
+    "priorNoneGeneral": "Never studied it",
+    "priorLittleGeneral": "I've read about it here and there",
+    "priorSomeGeneral": "I know the core ideas and vocabulary",
+    "priorMoreGeneral": "I've taken a course or used it in practice",
+    "selfRatingGreatGeneral": "Very good / I can teach it"
   },
   "roadmap": {
     "pathSuffix": "{{language}} path",
@@ -329,6 +396,51 @@
     "moduleDesignFailed": "Couldn't design {{module}}",
     "yourNextModule": "your next module",
     "moduleDesigningDesc": "This module is being written around how you've actually been doing, so it lands at the right difficulty.",
-    "moduleDesignFailedDesc": "The lesson plan for this module didn't generate. Give it another go."
+    "moduleDesignFailedDesc": "The lesson plan for this module didn't generate. Give it another go.",
+    "checkingAnswer": "Checking your answer...",
+    "mathInputPlaceholder": "Write your answer in LaTeX. Press \\ or / for commands.",
+    "mathInputHint": "Your answer appears here as you type",
+    "explainAnswerPlaceholder": "Explain your reasoning in two or three sentences"
+  },
+  "taxonomy": {
+    "placedIn": "Area:",
+    "change": "Change area",
+    "pickArea": "Pick the area this belongs to",
+    "newArea": "New area, added for this subject.",
+    "uncertain": "Best guess. Change it if this is not right."
+  },
+  "scoping": {
+    "cardTitle": "Narrowing down {{subject}}",
+    "titleBroad": "That is a big subject",
+    "titleNarrow": "That is quite specific",
+    "orDescribe": "Or describe it yourself",
+    "suggested": "Suggested goal",
+    "continue": "Continue",
+    "keepAsIs": "Keep as is"
+  },
+  "account": {
+    "title": "Account",
+    "signedInAs": "Signed in as {{handle}}",
+    "signOut": "Sign out",
+    "twoFactor": "Two-step verification",
+    "twoFactorOn": "On. A code from your authenticator app is asked at sign-in.",
+    "twoFactorOff": "Off. Add a second step with an authenticator app.",
+    "twoFactorUnavailable": "Not available on this server.",
+    "enableTwoFactor": "Enable",
+    "disableTwoFactor": "Disable",
+    "secretLabel": "Add this key to your authenticator app, then type a code to confirm:",
+    "confirmCode": "6-digit code",
+    "confirm": "Confirm",
+    "passwordLabel": "Your password",
+    "recoveryLeft_one": "{{count}} recovery code left",
+    "recoveryLeft_other": "{{count}} recovery codes left",
+    "deleteTitle": "Delete account",
+    "deleteBody": "This removes your account and everything you did here: paths, answers, vocabulary, progress. It cannot be undone.",
+    "deleteConfirm": "Type your handle ({{handle}}) to confirm",
+    "deleteButton": "Delete my account",
+    "toastDeleted": "Account deleted",
+    "toastError": "Could not complete that.",
+    "toast2faOn": "Two-step verification is on",
+    "toast2faOff": "Two-step verification is off"
   }
 }
