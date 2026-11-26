@@ -224,6 +224,16 @@
     "machineTranslation": "Machine translation of a verified original",
     "citationOnly": "The work is verified, but this passage could not be located in it. Follow the link to read it in context."
   },
+  "media": {
+    "title": "Supplementary material",
+    "loading": "Looking for pictures and recordings…",
+    "empty": "Nothing suitable found for this topic.",
+    "error": "Couldn't load supplementary material. The lesson works without it.",
+    "playVideo": "Play video",
+    "youtubeNotice": "Loads from YouTube (no cookies) only when you press play.",
+    "by": "By {{author}}",
+    "viewOn": "View on {{provider}}"
+  },
   "speak": {
     "title": "Speak",
     "subtitle": "Repeat phrases or hold a live spoken conversation — all powered by xAI voice.",

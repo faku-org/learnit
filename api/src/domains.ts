@@ -38,7 +38,13 @@ export type ExerciseType =
   | "code_fix"
   | "complexity";
 
-export type BlockKind = "text" | "latex" | "plot" | "diagram" | "source" | "code" | "table";
+/**
+ * `media` is the one kind no domain lists in `blocks`: the generator is never
+ * asked for it and `sanitizeBlocks` rejects it in exercise generation. Media
+ * blocks are attached to a topic by the media route, after a provider has
+ * verified the file and its license (see sources/media.ts).
+ */
+export type BlockKind = "text" | "latex" | "plot" | "diagram" | "source" | "code" | "table" | "media";
 
 export type GradingMode =
   | "exact"
@@ -70,7 +76,12 @@ export type SourceProviderId =
   | "openalex"
   | "arxiv"
   | "xai_search"
-  | "duckduckgo";
+  | "duckduckgo"
+  | "commons"
+  | "youtube";
+
+/** Backends that supply reference images, audio and video for a topic. */
+export type MediaProviderId = "commons" | "youtube";
 
 /**
  * Which family of prompt builders a subject uses.
@@ -98,6 +109,12 @@ export type DomainSpec = {
   features: { speak: boolean; vocabulary: boolean; tts: boolean };
   /** Retrieval backends consulted when a source block is requested. */
   sourceProviders: SourceProviderId[];
+  /**
+   * Backends consulted for the "Supplementary material" of a topic. Empty means
+   * the subject shows none: a picture of a kana row is reference material, a
+   * picture next to a calculus topic is decoration.
+   */
+  mediaProviders: MediaProviderId[];
 };
 
 export type DomainFragment = Partial<Omit<DomainSpec, "rules">> & { rules?: string[] };
@@ -119,6 +136,7 @@ export const BASE_SPEC: DomainSpec = {
   ],
   features: { speak: false, vocabulary: false, tts: false },
   sourceProviders: [],
+  mediaProviders: [],
 };
 
 // ── Fragments, keyed by taxonomy node id ──────────────────────────────────────
@@ -153,6 +171,9 @@ explicitly to translate FROM English into the target language.`,
     rules: [],
     features: { speak: true, vocabulary: true, tts: true },
     sourceProviders: ["wikisource", "gutenberg"],
+    // Pronunciation audio, pictures of the thing a word names, a clip of the
+    // language in use: the context a text-only example cannot carry.
+    mediaProviders: ["commons"],
   },
 
   // Classical languages read primary texts rather than order coffee.
@@ -364,6 +385,7 @@ function mergeFragment(base: DomainSpec, fragment: DomainFragment): DomainSpec {
     rules: [...base.rules, ...(fragment.rules ?? [])],
     features: fragment.features ?? base.features,
     sourceProviders: dedupe([...base.sourceProviders, ...(fragment.sourceProviders ?? [])]),
+    mediaProviders: dedupe([...base.mediaProviders, ...(fragment.mediaProviders ?? [])]),
   };
 }
 

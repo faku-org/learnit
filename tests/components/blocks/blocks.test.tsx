@@ -10,7 +10,7 @@ import "@/lib/i18n";
 // emit markup would be stored XSS against everyone who later draws one.
 
 const ALL: Parameters<typeof sanitizeBlocks>[1] = [
-  "text", "latex", "plot", "diagram", "source", "code", "table",
+  "text", "latex", "plot", "diagram", "source", "code", "table", "media",
 ];
 
 const render = (raw: unknown[]): { blocks: ContentBlock[]; html: string } => {
@@ -149,5 +149,52 @@ describe("blocks cannot carry markup into the page", () => {
       { kind: "text", value: "hi", dangerouslySetInnerHTML: { __html: "<script>" } },
     ]);
     expect(blocks[0]).toEqual({ kind: "text", value: "hi" });
+  });
+});
+
+describe("media blocks", () => {
+  const commons = {
+    mediaId: "commons:File:Bäckerei.jpg",
+    provider: "commons",
+    kind: "image",
+    title: "Bäckerei",
+    url: "https://upload.wikimedia.org/a/ab/Backerei.jpg",
+    thumb: "https://upload.wikimedia.org/thumb/Backerei.jpg",
+    pageUrl: "https://commons.wikimedia.org/wiki/File:Bäckerei.jpg",
+    author: "Ana Gómez",
+    license: "CC BY-SA 4.0",
+    licenseUrl: "https://creativecommons.org/licenses/by-sa/4.0",
+  };
+
+  test("an image is lazy, referrer-free and carries its attribution", () => {
+    const { html } = render([{ kind: "media", ref: commons }]);
+    expect(html).toContain('loading="lazy"');
+    expect(html).toContain('referrerPolicy="no-referrer"');
+    expect(html).toContain("Ana Gómez");
+    expect(html).toContain("CC BY-SA 4.0");
+    expect(html).toContain("https://creativecommons.org/licenses/by-sa/4.0");
+    expect(html).toContain("https://commons.wikimedia.org/wiki/");
+  });
+
+  test("audio does not preload", () => {
+    const { html } = render([{ kind: "media", ref: { ...commons, kind: "audio", mediaId: "commons:File:a.ogg", url: "https://upload.wikimedia.org/a.ogg" } }]);
+    expect(html).toContain("<audio");
+    expect(html).toContain('preload="none"');
+  });
+
+  test("a YouTube video is a button until clicked, with no third-party request in the markup", () => {
+    const { html } = render([{
+      kind: "media",
+      ref: { mediaId: "youtube:dQw4w9WgXcQ", provider: "youtube", kind: "video", title: "Greetings", youtubeId: "dQw4w9WgXcQ", author: "Learn German", license: "Standard YouTube License (embed only)" },
+    }]);
+    expect(html).toContain("<button");
+    expect(html).not.toContain("<iframe");
+    expect(html).not.toContain("youtube-nocookie.com");
+  });
+
+  test("a hostile URL never reaches the markup", () => {
+    const { blocks, html } = render([{ kind: "media", ref: { ...commons, url: "https://evil.example/x.jpg" } }]);
+    expect(blocks).toHaveLength(0);
+    expect(html).not.toContain("evil.example");
   });
 });

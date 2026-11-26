@@ -224,6 +224,16 @@
     "machineTranslation": "Traducción automática de un original verificado",
     "citationOnly": "La obra está verificada, pero no se pudo localizar este pasaje en ella. Sigue el enlace para leerla en su contexto."
   },
+  "media": {
+    "title": "Material complementario",
+    "loading": "Buscando imágenes y grabaciones…",
+    "empty": "No se encontró nada adecuado para este tema.",
+    "error": "No se pudo cargar el material complementario. La lección funciona igual.",
+    "playVideo": "Reproducir video",
+    "youtubeNotice": "Se carga desde YouTube (sin cookies) solo cuando tocás reproducir.",
+    "by": "De {{author}}",
+    "viewOn": "Ver en {{provider}}"
+  },
   "speak": {
     "title": "Hablar",
     "subtitle": "Repite frases o mantené una conversación en vivo — todo con voz de xAI.",

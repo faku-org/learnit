@@ -6,7 +6,7 @@
 // corpus and returns the real text, or it does not and the block is dropped.
 // Nothing in between reaches the student.
 
-import type { SourceProviderId } from "../domains";
+import type { MediaProviderId, SourceProviderId } from "../domains";
 
 /** What the generator proposed. Every field is a hint, none is trusted. */
 export type SourceClaim = {
@@ -77,3 +77,36 @@ export const TRUST = {
   /** A general web search found it. Verified against a structured provider if possible. */
   search: 0.3,
 } as const;
+
+// ── Media ─────────────────────────────────────────────────────────────────────
+//
+// Same contract as sources, applied to pictures, pronunciation audio and video:
+// a provider returns only files it actually found, under a license it actually
+// read, with the attribution that license requires. Nothing is proposed by the
+// generator and nothing unlicensed is passed through.
+
+export type { MediaKind, MediaRef } from "../blocks";
+
+export type MediaClaim = {
+  /** What to look for. Free text; a provider narrows it as it sees fit. */
+  query: string;
+  kinds?: ("image" | "audio" | "video")[];
+  /** Language of the audio wanted, as a name or code. */
+  lang?: string;
+  /** A video id someone proposed. It is verified, never trusted. */
+  youtubeId?: string;
+};
+
+/** A verified file. Same shape as what the block stores, so there is no second mapping to keep in sync. */
+export type MediaCandidate = import("../blocks").MediaRef;
+
+export type MediaProvider = {
+  id: MediaProviderId;
+  /**
+   * Verified, openly licensed files for a claim.
+   *
+   * `null` means the provider could not be reached, which must not be cached as
+   * "there is nothing". An empty array means it answered and had nothing.
+   */
+  find(claim: MediaClaim): Promise<MediaCandidate[] | null>;
+};

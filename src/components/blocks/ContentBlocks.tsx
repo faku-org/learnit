@@ -6,6 +6,7 @@ import { Diagram } from "./Diagram";
 import { SourceExcerpt } from "./SourceExcerpt";
 import { CodeBlock } from "./CodeBlock";
 import { DataTable } from "./DataTable";
+import { MediaBlock } from "./MediaBlock";
 
 /**
  * Inline `$...$` inside a text block, because a sentence like "solve for $x$"
@@ -32,6 +33,7 @@ function Block({ block }: { block: ContentBlock }) {
     case "source": return <SourceExcerpt refData={block.ref} />;
     case "code": return <CodeBlock lang={block.lang} value={block.value} highlight={block.highlight} />;
     case "table": return <DataTable headers={block.headers} rows={block.rows} caption={block.caption} />;
+    case "media": return <MediaBlock refData={block.ref} />;
   }
 }
 

@@ -19,6 +19,7 @@ import {
   type LucideProps,
 } from "lucide-react";
 import * as LucideIcons from "lucide-react";
+import { TopicMedia } from "@/components/TopicMedia";
 
 function ExerciseIcon({ name, ...props }: { name: string } & LucideProps) {
   const Icon = (LucideIcons as Record<string, unknown>)[name] as React.FC<LucideProps> | undefined;
@@ -217,6 +218,17 @@ function LearnInner() {
         progress.currentTopicIndex
       ]?.name ?? null
     );
+  }, [currentPath, progress, activeTopicKey]);
+
+  /** Where the topic on screen sits on the path, for the lazy supplementary material. */
+  const currentTopicPos = useMemo(() => {
+    if (!currentPath || !progress) return null;
+    const [moduleIndex, topicIndex] = activeTopicKey
+      ? activeTopicKey.split("-").map(Number)
+      : [progress.currentModuleIndex, progress.currentTopicIndex];
+    return currentPath.modules[moduleIndex]?.topics?.[topicIndex]
+      ? { pathId: currentPath._id, moduleIndex, topicIndex }
+      : null;
   }, [currentPath, progress, activeTopicKey]);
 
   // The module the student just walked into has an outline but no topics yet.
@@ -1260,6 +1272,13 @@ function LearnInner() {
               </motion.div>
             )}
           </AnimatePresence>
+
+          {currentTopicPos && (
+            <TopicMedia
+              key={`${currentTopicPos.pathId}-${currentTopicPos.moduleIndex}-${currentTopicPos.topicIndex}`}
+              {...currentTopicPos}
+            />
+          )}
         </div>
       </motion.div>
     </div>

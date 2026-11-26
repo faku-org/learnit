@@ -19,6 +19,8 @@ import { sanitizeBlocks } from "./blocks";
 import { parseGradingSpec } from "./grading";
 import { gradeSemantically } from "./semantic";
 import { ensureSourceIndexes, resolveSourceBlocks } from "./sources";
+import { ensureMediaIndexes } from "./sources/media";
+import { mediaRoutes } from "./media-routes";
 import { classifySubject, classificationFor, checkScope, buildSubjectContext } from "./classify";
 import {
   pathOutlinePrompt,
@@ -440,9 +442,11 @@ export const app = new Elysia()
     const db = await connectDB();
     await seedTaxonomy(db);
     await ensureSourceIndexes(db);
+    await ensureMediaIndexes(db);
     await ensureAccountIndexes(db);
   })
   .use(accountRoutes)
+  .use(mediaRoutes)
 
   .get("/api/health", () => ({
     status: "ok",

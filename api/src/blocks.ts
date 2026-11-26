@@ -83,6 +83,41 @@ export type SourceRef = {
   showTranslation: boolean;
 };
 
+export type MediaKind = "image" | "audio" | "video";
+
+/**
+ * A verified reference image, pronunciation clip or video.
+ *
+ * Like `SourceRef`, this is what a provider RETURNED, never what the generator
+ * proposed. Every file URL is on a Wikimedia host (or is a bare YouTube id the
+ * client turns into a youtube-nocookie embed), and attribution and license are
+ * mandatory: a file without them is not shown, because showing it would breach
+ * the license it is offered under.
+ */
+export type MediaRef = {
+  /** `provider:externalId`, the shared-cache key. */
+  mediaId: string;
+  provider: "commons" | "youtube";
+  kind: MediaKind;
+  title: string;
+  /** Direct file URL on upload.wikimedia.org. Absent for YouTube. */
+  url?: string;
+  /** Image preview on upload.wikimedia.org or thumb.wikimedia.org. */
+  thumb?: string;
+  mime?: string;
+  width?: number;
+  height?: number;
+  /** 11-character video id; the only thing that identifies a YouTube embed. */
+  youtubeId?: string;
+  /** Where the file lives and its attribution can be checked. */
+  pageUrl: string;
+  author?: string;
+  license: string;
+  licenseUrl?: string;
+  /** What the file shows, for `alt` text and the caption. */
+  description?: string;
+};
+
 export type ContentBlock =
   | { kind: "text"; value: string }
   | { kind: "latex"; value: string; display?: boolean }
@@ -90,7 +125,8 @@ export type ContentBlock =
   | { kind: "diagram"; spec: DiagramSpec }
   | { kind: "source"; ref: SourceRef }
   | { kind: "code"; lang: string; value: string; highlight?: number[] }
-  | { kind: "table"; headers: string[]; rows: string[][]; caption?: string };
+  | { kind: "table"; headers: string[]; rows: string[][]; caption?: string }
+  | { kind: "media"; ref: MediaRef };
 
 // ── Limits ────────────────────────────────────────────────────────────────────
 //
@@ -358,6 +394,80 @@ function sanitizeTable(raw: Record<string, unknown>): ContentBlock | null {
   return { kind: "table", headers, rows, ...(caption ? { caption } : {}) };
 }
 
+/** Hosts a stored media URL may point at. Anything else is dropped, so a stored `javascript:` or
+ * third-party URL can never reach an `<img>`, `<audio>`, `<video>` or anchor. */
+const FILE_HOSTS = new Set(["upload.wikimedia.org", "thumb.wikimedia.org"]);
+const PAGE_HOSTS = new Set(["commons.wikimedia.org"]);
+const YOUTUBE_ID = /^[A-Za-z0-9_-]{11}$/;
+const MEDIA_KINDS = new Set<MediaKind>(["image", "audio", "video"]);
+
+function httpsOn(v: unknown, hosts: Set<string>): string | null {
+  const raw = str(v, 1000);
+  if (!raw) return null;
+  try {
+    const u = new URL(raw);
+    return u.protocol === "https:" && hosts.has(u.hostname) ? u.href : null;
+  } catch {
+    return null;
+  }
+}
+
+function sanitizeMedia(raw: Record<string, unknown>): ContentBlock | null {
+  const body = isRecord(raw.ref) ? raw.ref : null;
+  if (!body) return null;
+  const kind = body.kind;
+  if (typeof kind !== "string" || !MEDIA_KINDS.has(kind as MediaKind)) return null;
+  const provider = body.provider;
+  if (provider !== "commons" && provider !== "youtube") return null;
+
+  const title = str(body.title, MAX_LABEL);
+  const mediaId = str(body.mediaId, 300);
+  const license = str(body.license, MAX_LABEL);
+  const author = str(body.author, MAX_LABEL);
+  if (!title || !mediaId || !license) return null;
+
+  const ref: MediaRef = {
+    mediaId,
+    provider,
+    kind: kind as MediaKind,
+    title,
+    license,
+    pageUrl: "",
+  };
+  if (author) ref.author = author;
+  const description = str(body.description, 400);
+  if (description) ref.description = description;
+  const licenseUrl = str(body.licenseUrl, 300);
+  if (licenseUrl && /^https?:\/\//i.test(licenseUrl)) ref.licenseUrl = licenseUrl;
+
+  if (provider === "youtube") {
+    const id = typeof body.youtubeId === "string" ? body.youtubeId : "";
+    // Only the id is kept; the embed URL is built from it by the renderer, so
+    // there is no stored URL to point somewhere else.
+    if (!YOUTUBE_ID.test(id) || kind !== "video" || !author) return null;
+    ref.youtubeId = id;
+    ref.pageUrl = `https://www.youtube.com/watch?v=${id}`;
+    return { kind: "media", ref };
+  }
+
+  const url = httpsOn(body.url, FILE_HOSTS);
+  const pageUrl = httpsOn(body.pageUrl, PAGE_HOSTS);
+  if (!url || !pageUrl) return null;
+  ref.url = url;
+  ref.pageUrl = pageUrl;
+  const thumb = httpsOn(body.thumb, FILE_HOSTS);
+  if (thumb) ref.thumb = thumb;
+  const mime = str(body.mime, 64);
+  if (mime && /^(image|audio|video)\/[a-z0-9.+-]+$/i.test(mime)) ref.mime = mime.toLowerCase();
+  const width = num(body.width);
+  const height = num(body.height);
+  if (width !== null && height !== null && width > 0 && height > 0) {
+    ref.width = Math.round(width);
+    ref.height = Math.round(height);
+  }
+  return { kind: "media", ref };
+}
+
 const SANITIZERS: Record<BlockKind, (raw: Record<string, unknown>) => ContentBlock | null> = {
   text: sanitizeText,
   latex: sanitizeLatex,
@@ -366,6 +476,7 @@ const SANITIZERS: Record<BlockKind, (raw: Record<string, unknown>) => ContentBlo
   source: sanitizeSource,
   code: sanitizeCode,
   table: sanitizeTable,
+  media: sanitizeMedia,
 };
 
 // ── Entry point ───────────────────────────────────────────────────────────────
