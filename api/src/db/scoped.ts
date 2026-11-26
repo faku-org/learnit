@@ -7,9 +7,13 @@ import type { Db, Document, Filter, FindOptions, UpdateFilter, UpdateOptions } f
  * this directory, so new queries come through here.
  */
 export const USER_COLLECTIONS = [
+  "assessment_credentials",
+  "assessments",
   "attempts",
   "feedback",
   "goals",
+  "integration_consents",
+  "integration_shares",
   "module_completions",
   "paths",
   "preferences",

@@ -39,7 +39,7 @@ export async function publicUser(user: AccountUser) {
 const setSession = (cookie: Cookies, session: { token: string; expiresAt: Date }) =>
   cookie[SESSION_COOKIE]?.set({ value: session.token, ...sessionCookie(session.expiresAt, cookieConfig()) });
 
-const sameOrigin = (request: Request): boolean => {
+export const sameOrigin = (request: Request): boolean => {
   const origin = request.headers.get("origin");
   if (!origin) return true;
   try {

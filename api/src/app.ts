@@ -50,6 +50,7 @@ import {
 import { LIMITS, addressOf, authenticate, limiter } from "./accounts";
 import { ensureAccountIndexes } from "./accounts/mongo-store";
 import { accountRoutes } from "./accounts/routes";
+import { ensureIntegrationIndexes, integrationRoutes } from "./integration";
 import { forUser } from "./db/scoped";
 
 // ── SM-2 spaced repetition ────────────────────────────────────────────────────
@@ -441,8 +442,10 @@ export const app = new Elysia()
     await seedTaxonomy(db);
     await ensureSourceIndexes(db);
     await ensureAccountIndexes(db);
+    await ensureIntegrationIndexes(db);
   })
   .use(accountRoutes)
+  .use(integrationRoutes)
 
   .get("/api/health", () => ({
     status: "ok",
