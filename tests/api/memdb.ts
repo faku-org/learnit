@@ -3,16 +3,19 @@ export type MemDoc = Record<string, unknown> & { _id: string };
 type Query = Record<string, unknown>;
 
 function valueMatches(doc: MemDoc, key: string, expected: unknown): boolean {
-  if (key === "_id") return String(doc._id) === String(expected);
   if (expected !== null && typeof expected === "object" && !Array.isArray(expected)) {
     const op = expected as Record<string, unknown>;
-    if ("$in" in op) return Array.isArray(op.$in) && op.$in.includes(doc[key]);
+    // `_id` is compared as a string so an ObjectId in the query meets the hex id stored here.
+    const same = (a: unknown, b: unknown) => (key === "_id" ? String(a) === String(b) : a === b);
+    if ("$in" in op) return Array.isArray(op.$in) && op.$in.some((v) => same(v, doc[key]));
+    if ("$nin" in op) return Array.isArray(op.$nin) && !op.$nin.some((v) => same(v, doc[key]));
     if ("$ne" in op) return doc[key] !== op.$ne;
     if ("$gte" in op) return (doc[key] as number) >= (op.$gte as number);
     if ("$lt" in op) return (doc[key] as number) < (op.$lt as number);
     if ("$lte" in op) return (doc[key] as number) <= (op.$lte as number);
     if ("$gt" in op) return (doc[key] as number) > (op.$gt as number);
   }
+  if (key === "_id") return String(doc._id) === String(expected);
   return doc[key] === expected;
 }
 
@@ -55,6 +58,9 @@ export function memCollection() {
     find(query: Query) {
       const cursor = {
         sort: () => cursor,
+        project: () => cursor,
+        limit: () => cursor,
+        skip: () => cursor,
         toArray: async (): Promise<MemDoc[]> => docs.filter((d) => matches(d, query)),
       };
       return cursor;

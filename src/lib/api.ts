@@ -67,7 +67,8 @@ export const recoverAccount = (data: { handle: string; code: string }) =>
   post<{ status: "ok"; user: AccountUser }>("/api/auth/2fa/recover", data);
 export const logoutAccount = () => post<{ status: "ok" }>("/api/auth/logout");
 
-export const startTotpSetup = () => post<{ secret: string; otpauth: string }>("/api/auth/2fa/setup", {});
+export const startTotpSetup = () =>
+  post<{ secret: string; otpauth: string }>("/api/auth/2fa/setup", {});
 export const confirmTotpSetup = (code: string) =>
   post<{ status: "ok"; totpEnabled: true }>("/api/auth/2fa/setup", { code });
 export const disableTotp = (password: string) =>
@@ -214,7 +215,7 @@ export const generateExercise = (data: {
     body: JSON.stringify(data),
   });
 
-export const getNextExercise = (params: {
+export type NextExerciseParams = {
   subject: string;
   taxonomyLeaf?: string;
   /** The path's pinned exercise-bank partition. Never derive this. */
@@ -222,7 +223,20 @@ export const getNextExercise = (params: {
   topic: string;
   level?: string;
   nativeLanguage?: string;
-}) => {
+};
+
+/** One answer from `/api/exercises/next`: an exercise, or "nothing yet, it is being generated". */
+export type NextExerciseReply =
+  | { status: "ready"; exercise: Record<string, unknown> }
+  | { status: "generating"; retryAfterMs: number };
+
+/**
+ * Ask once. The server never waits for a model: it answers from the exercise bank at once, or says it has
+ * started generating (`_status: "generating"`, HTTP 202) and to ask again in `retryAfterMs`.
+ */
+export const getNextExerciseOnce = async (
+  params: NextExerciseParams,
+): Promise<NextExerciseReply> => {
   const qs = new URLSearchParams({
     subject: params.subject,
     topic: params.topic,
@@ -233,7 +247,46 @@ export const getNextExercise = (params: {
   // difference between a cached lookup and an LLM call on every exercise.
   if (params.taxonomyLeaf) qs.set("taxonomyLeaf", params.taxonomyLeaf);
   if (params.bankKey) qs.set("bankKey", params.bankKey);
-  return request<Record<string, unknown>>(`/api/exercises/next?${qs}`);
+  const body = await request<Record<string, unknown>>(`/api/exercises/next?${qs}`);
+  if (body._status === "generating") {
+    const wait = Number(body.retryAfterMs);
+    return { status: "generating", retryAfterMs: Number.isFinite(wait) && wait > 0 ? wait : 1500 };
+  }
+  return { status: "ready", exercise: body };
+};
+
+export type NextExerciseOptions = {
+  /** Called once, the first time the server says the exercise is being generated rather than loaded. */
+  onGenerating?: () => void;
+  /** Give up (throw) after this long. Generation is slow, but not unbounded. */
+  maxWaitMs?: number;
+  /** Test seam: replaces the wait between polls. */
+  sleep?: (ms: number) => Promise<void>;
+};
+
+const MAX_POLL_MS = 3000;
+
+/** The next exercise, polling while the server generates it. Resolves with the exercise itself. */
+export const getNextExercise = async (
+  params: NextExerciseParams,
+  {
+    onGenerating,
+    maxWaitMs = 180_000,
+    sleep = (ms) => new Promise((r) => setTimeout(r, ms)),
+  }: NextExerciseOptions = {},
+): Promise<Record<string, unknown>> => {
+  const startedAt = Date.now();
+  let announced = false;
+  for (;;) {
+    const reply = await getNextExerciseOnce(params);
+    if (reply.status === "ready") return reply.exercise;
+    if (!announced) {
+      announced = true;
+      onGenerating?.();
+    }
+    if (Date.now() - startedAt >= maxWaitMs) throw new Error("Exercise generation timed out");
+    await sleep(Math.min(reply.retryAfterMs, MAX_POLL_MS));
+  }
 };
 
 /**
@@ -482,7 +535,11 @@ export const deleteVocabulary = (id: string) =>
 
 /** Fetches synthesized speech as a playable blob. `language` is the app's
  * language name (e.g. "japanese"), not a BCP-47 code — the backend maps it. */
-export async function synthesizeSpeech(text: string, language: string, voice?: string): Promise<Blob> {
+export async function synthesizeSpeech(
+  text: string,
+  language: string,
+  voice?: string,
+): Promise<Blob> {
   const res = await fetch(apiUrl("/api/speak/tts"), {
     method: "POST",
     credentials: "include",
