@@ -220,7 +220,9 @@ export async function bankFor(
   db: DbLike,
   filter: { taxonomyLeaf: string; level?: string },
 ): Promise<Doc[]> {
-  return (await db.collection(SERVICE_COLLECTIONS.bank).find(filter).toArray()) as unknown as Doc[];
+  const cursor = db.collection(SERVICE_COLLECTIONS.bank).find(filter);
+  const rows = (await cursor.toArray()) as unknown as Doc[] | undefined;
+  return rows ?? [];
 }
 
 export async function allBank(db: DbLike): Promise<Doc[]> {

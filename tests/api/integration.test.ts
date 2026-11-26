@@ -5,6 +5,7 @@ import {
   type SignedCredential,
 } from "../../api/src/integration/credentials";
 import { CREDENTIAL_KEY, SERVICE_TOKEN, SERVICE_TOKEN_NEXT, app, limiter, state } from "./harness";
+import { bankFor } from "../../api/src/db/integration";
 import { memDb, objectIdHex } from "./memdb";
 
 /** Contract tests for the JobIt integration (issue #10, ADR 0003). The bank is seeded; nothing calls a model. */
@@ -149,15 +150,13 @@ describe("GET /api/catalog", () => {
   test("never carries personal data, even when users and paths exist", async () => {
     await seedBank(3);
     const user = await signUp("anna");
-    await state.db
-      .collection("paths")
-      .insertOne({
-        _id: objectIdHex(),
-        userId: user.id,
-        subject: "German",
-        objective: "secret goal",
-        modules: [],
-      } as never);
+    await state.db.collection("paths").insertOne({
+      _id: objectIdHex(),
+      userId: user.id,
+      subject: "German",
+      objective: "secret goal",
+      modules: [],
+    } as never);
     const text = JSON.stringify(await json(await call({}, "GET", "/api/catalog")));
     for (const leak of [user.id, "anna", "secret goal", "userId", "email"])
       expect(text).not.toContain(leak);
@@ -166,6 +165,15 @@ describe("GET /api/catalog", () => {
   test("has no write verbs", async () => {
     expect((await call({}, "POST", "/api/catalog", {})).status).toBeGreaterThanOrEqual(404);
     expect((await call({}, "DELETE", "/api/catalog")).status).toBeGreaterThanOrEqual(404);
+  });
+});
+
+describe("bank lookup without a match", () => {
+  test("bankFor returns an empty list when nothing matches the leaf or level", async () => {
+    expect(await bankFor(state.db as never, { taxonomyLeaf: "no.such.leaf" })).toEqual([]);
+    expect(await bankFor(state.db as never, { taxonomyLeaf: "no.such.leaf", level: "B2" })).toEqual(
+      [],
+    );
   });
 });
 
@@ -510,11 +518,9 @@ describe("consent and link", () => {
     const unknown = await call(svc, "POST", "/api/service/link", { code: "nope" });
 
     const { body: stale } = await consentFor(anna);
-    await state.db
-      .collection("integration_consents")
-      .updateOne({ _id: stale.id } as never, {
-        $set: { codeExpiresAt: "2000-01-01T00:00:00.000Z" },
-      });
+    await state.db.collection("integration_consents").updateOne({ _id: stale.id } as never, {
+      $set: { codeExpiresAt: "2000-01-01T00:00:00.000Z" },
+    });
     const expired = await call(svc, "POST", "/api/service/link", { code: stale.code });
 
     const { body: gone } = await consentFor(anna);
@@ -555,15 +561,13 @@ describe("what a link reveals", () => {
   test("by default only the assessment result is shared, never the path", async () => {
     await seedBank(4);
     const anna = await signUp("anna");
-    await state.db
-      .collection("paths")
-      .insertOne({
-        _id: objectIdHex(),
-        userId: anna.id,
-        subject: "German",
-        objective: "private goal",
-        modules: [],
-      } as never);
+    await state.db.collection("paths").insertOne({
+      _id: objectIdHex(),
+      userId: anna.id,
+      subject: "German",
+      objective: "private goal",
+      modules: [],
+    } as never);
     const { consent, linkId } = await linked(anna);
     await takeAssessment(anna, allRight, { link_id: linkId });
 
@@ -590,15 +594,13 @@ describe("what a link reveals", () => {
       startingLevel: "complete_beginner",
       modules: [{ name: "Basics", topics: [{ name: "Hello" }] }],
     } as never);
-    await state.db
-      .collection("paths")
-      .insertOne({
-        _id: kept,
-        userId: anna.id,
-        subject: "French",
-        objective: "keep me",
-        modules: [],
-      } as never);
+    await state.db.collection("paths").insertOne({
+      _id: kept,
+      userId: anna.id,
+      subject: "French",
+      objective: "keep me",
+      modules: [],
+    } as never);
 
     const { linkId } = await linked(anna, { paths: [shared] });
     const body = await json(await call(svc, "GET", `/api/service/links/${linkId}`));
