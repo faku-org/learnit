@@ -17,7 +17,7 @@ const OWNERS = ["api/src/db/", "api/src/accounts/"];
 /** Raw `.collection(` calls that predate `forUser`. Shared collections (taxonomy, sources, the exercise bank,
  * calibration blueprints) are not per-user and stay raw; per-user ones in app.ts are the ones to migrate. */
 const LEGACY: Record<string, number> = {
-  "api/src/app.ts": 53,
+  "api/src/app.ts": 43,
   "api/src/migrate-taxonomy.ts": 7,
   "api/src/semantic.ts": 3,
   "api/src/sources/index.ts": 4,

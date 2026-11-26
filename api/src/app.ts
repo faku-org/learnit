@@ -12,20 +12,18 @@ import {
   type Attempt,
   type TopicSession,
 } from "./schemas";
-import { generateJSON, validateExercise, FLASH_MODEL } from "./llm";
+import { generateJSON, FLASH_MODEL } from "./llm";
+import { nextExercise, safeExerciseFields, verifySources } from "./exercise-feed";
 import { seedTaxonomy, bumpPathCount, allNodes } from "./taxonomy";
-import { isLanguagePath, type BlockKind, type ExerciseType } from "./domains";
-import { sanitizeBlocks } from "./blocks";
-import { parseGradingSpec } from "./grading";
+import { isLanguagePath, type ExerciseType } from "./domains";
 import { gradeSemantically } from "./semantic";
-import { ensureSourceIndexes, resolveSourceBlocks } from "./sources";
+import { ensureSourceIndexes } from "./sources";
 import { classifySubject, classificationFor, checkScope, buildSubjectContext } from "./classify";
 import {
   pathOutlinePrompt,
   moduleTopicsPrompt,
   exercisePrompt,
   calibrationStagePrompt,
-  pickNextType,
   type SubjectContext,
 } from "./prompt-router";
 import {
@@ -108,79 +106,6 @@ function awardAnswerPoints(
   if (outcome !== "correct") return 0;
   if (alreadyMastered) return POINTS.correctRepeat;
   return POINTS.correct + (durationMs > 0 && durationMs < FAST_MS ? POINTS.fastBonus : 0);
-}
-
-// ── Adaptive difficulty ───────────────────────────────────────────────────────
-
-function computeDifficultyNote(recentScores: number[], bias: number): string | undefined {
-  if (recentScores.length === 0) return undefined;
-  const avg = recentScores.reduce((a, b) => a + b, 0) / recentScores.length;
-  const adjusted = avg + bias * 0.2;
-  if (adjusted < 0.5)
-    return "Generate an easier exercise: simpler vocabulary, shorter sentences, very common structures.";
-  if (adjusted > 0.85)
-    return "Generate a harder exercise: complex vocabulary, idiomatic expressions, nuanced grammar.";
-  return undefined;
-}
-
-// ── Generated content, rebuilt before it is stored ────────────────────────────
-
-/**
- * A generated exercise with its two structured fields re-read from a whitelist.
- *
- * Everything else the model returned is prose and is stored as-is, as it always
- * has been. `blocks` and `grading` are different: blocks are rendered, exercises
- * are SHARED ACROSS USERS, and a generator that could emit markup would be
- * stored XSS against everyone who later draws the exercise. So the stored block
- * array is rebuilt field by field rather than passed through, and a grading spec
- * that does not typecheck is dropped so the legacy fields grade it instead of a
- * half-formed one.
- */
-function safeExerciseFields(
-  raw: Record<string, unknown>,
-  spec: { blocks: BlockKind[] },
-  resolvedBlocks?: unknown,
-): Record<string, unknown> {
-  const { blocks, grading, ...rest } = raw;
-  const cleanBlocks = sanitizeBlocks(resolvedBlocks ?? blocks, spec.blocks);
-  const cleanGrading = parseGradingSpec(grading);
-  return {
-    ...rest,
-    ...(cleanBlocks.length > 0 ? { blocks: cleanBlocks } : {}),
-    ...(cleanGrading ? { grading: cleanGrading } : {}),
-  };
-}
-
-/** Exercise types whose question is unanswerable without the source it cites. */
-const SOURCE_DEPENDENT: ReadonlySet<string> = new Set(["source_analysis", "reading_comprehension"]);
-
-/**
- * Retrieve and verify every source the generator proposed.
- *
- * The generator is never trusted for a citation: asked for a primary source it
- * will invent one with a plausible attribution, and telling it not to does not
- * work. So each claim is resolved against a real corpus and the block is either
- * rewritten with the retrieved text or dropped.
- *
- * The returned `lostItsSource` flag is what drives regeneration: an exercise
- * that asks the student to read a passage is worthless once the passage is gone.
- */
-async function verifySources(
-  db: Db,
-  exercise: Record<string, unknown>,
-  ctx: SubjectContext,
-  type: string,
-): Promise<{ blocks: unknown[]; lostItsSource: boolean }> {
-  const outcome = await resolveSourceBlocks(db, exercise.blocks, ctx.spec, ctx.nativeLanguage)
-    .catch(() => null);
-  if (!outcome) {
-    return { blocks: Array.isArray(exercise.blocks) ? exercise.blocks : [], lostItsSource: false };
-  }
-  return {
-    blocks: outcome.blocks,
-    lostItsSource:
-      SOURCE_DEPENDENT.has(type) && outcome.proposed > 0 && outcome.verified === 0,
-  };
 }
 
 // ── Segmented path generation ─────────────────────────────────────────────────
@@ -1123,14 +1048,14 @@ export const app = new Elysia()
     }
   })
 
-  // ── Smart SRS exercise selection ──────────────────────────────────────────
+  // ── Next exercise: served from the bank, never generated inside the request ───
 
   .get("/api/exercises/next", async ({ query, headers, set }: any) => {
     const user = await requireUser(headers, set);
     if (!user) return { error: "Unauthorized" };
 
     const {
-      subject: subjectInput, language, taxonomyLeaf, bankKey: bankKeyInput,
+      subject: subjectInput, language, taxonomyLeaf, bankKey,
       topic, level = "beginner", nativeLanguage = "english",
     } = query as Record<string, string>;
     const subject = subjectInput ?? language;
@@ -1141,171 +1066,20 @@ export const app = new Elysia()
     }
 
     const db = await getDB();
-    const classification = taxonomyLeaf
-      ? await classificationFor(db, taxonomyLeaf)
-      : await classifySubject(db, subject, "");
-    const ctx = await buildSubjectContext(db, {
-      subject,
-      taxonomy: classification.taxonomy,
-      nativeLanguage,
-    });
-    const leaf = classification.taxonomyLeaf;
-    const bank = (bankKeyInput as string | undefined) ?? leaf;
-    const topicKey = topicKeyOf(bank, topic, level);
-    const now = new Date().toISOString();
-
-    // 1. Due SRS cards for this topic (exclude cards not yet answered — lastScore -1
-    // is a placeholder set when an exercise is first served, so it doesn't cause a
-    // still-unanswered exercise to be re-served as if it were due for review)
-    const dueCard = await db.collection("user_exercises").findOne(
-      { userId: user.userId, topicKey, dueDate: { $lte: now }, lastScore: { $ne: -1 } },
-      { sort: { dueDate: 1 } },
-    );
-    if (dueCard) {
-      const ex = await db
-        .collection("exercises")
-        .findOne({ _id: new ObjectId(dueCard.exerciseId as string) });
-      if (ex) {
-        return {
-          ...ex,
-          _id: ex._id.toString(),
-          _srs: { dueDate: dueCard.dueDate, interval: dueCard.interval },
-        };
-      }
-    }
-
-    // 2. Unseen exercises from bank (rotate type)
-    const seenIds = await db
-      .collection("user_exercises")
-      .find({ userId: user.userId, topicKey })
-      .project({ exerciseId: 1 })
-      .toArray();
-    const seenObjectIds = seenIds
-      .map((s) => { try { return new ObjectId(s.exerciseId as string); } catch { return null; } })
-      .filter((id): id is ObjectId => id !== null);
-
-    const recentTypesDocs = await db
-      .collection("user_exercises")
-      .find({ userId: user.userId, topicKey })
-      .sort({ updatedAt: -1 })
-      .limit(10)
-      .project({ exerciseType: 1 })
-      .toArray();
-    const recentTypes = recentTypesDocs.map((d) => d.exerciseType as string).filter(Boolean);
-    const nextType = pickNextType(ctx.spec, recentTypes);
-
-    const unseen = await db.collection("exercises").findOne({
-      topicKey,
-      type: nextType,
-      ...(seenObjectIds.length > 0 ? { _id: { $nin: seenObjectIds } } : {}),
-    });
-    if (unseen) {
-      // Create an SRS card immediately so next call doesn't re-pick it
-      await db.collection("user_exercises").insertOne({
-        userId: user.userId,
-        exerciseId: unseen._id.toString(),
-        exerciseType: unseen.type,
-        topicKey,
-        ease: 2.5,
-        interval: 0,
-        repetitions: 0,
-        dueDate: now,
-        lastScore: -1,
-        updatedAt: now,
+    try {
+      const result = await nextExercise(db, {
+        userId: user.userId, subject, taxonomyLeaf, bankKey, topic, level, nativeLanguage,
       });
-      return { ...unseen, _id: unseen._id.toString() };
-    }
-
-    // 3. Generate adaptive exercise
-    const prefs = await db.collection("preferences").findOne({ userId: user.userId });
-    const bias = (prefs?.difficultyBias as number) ?? 0;
-
-    const recentScoresDocs = await db
-      .collection("user_exercises")
-      .find({ userId: user.userId, topicKey })
-      .sort({ updatedAt: -1 })
-      .limit(10)
-      .project({ lastScore: 1 })
-      .toArray();
-    const recentScores = recentScoresDocs
-      .map((d) => d.lastScore as number)
-      .filter((s) => s >= 0);
-
-    const difficultyNote = computeDifficultyNote(recentScores, bias);
-
-    const built = exercisePrompt(ctx, { level, topic, type: nextType, difficultyNote });
-    let exercise = await generateJSON<Record<string, unknown>>(built.system, built.user, {
-      temperature: 0.9,
-      maxTokens: 2048,
-    });
-
-    // Validate: correct in-place if fixable, regenerate once if not
-    const validation = await validateExercise(exercise, subject, level, topic);
-    if (!validation.valid) {
-      if (validation.corrected) {
-        exercise = { ...exercise, ...validation.corrected };
-      } else {
-        const retry = exercisePrompt(ctx, { level, topic, type: nextType });
-        exercise = await generateJSON<Record<string, unknown>>(retry.system, retry.user, {
-          temperature: 0.7,
-          maxTokens: 2048,
-        });
+      // 202: nothing to serve yet, generation is running; the client asks again after `retryAfterMs`.
+      if (result.status === "generating") {
+        set.status = 202;
+        return { _status: "generating", retryAfterMs: result.retryAfterMs };
       }
+      return { ...result.exercise, _status: "ready", _delivery: result.delivery };
+    } catch (err) {
+      set.status = 500;
+      return { error: "LLM generation failed", detail: String(err) };
     }
-
-    // Retrieve and verify every cited source. A citation the generator invented
-    // fails here and its block is dropped; if that leaves a source-dependent
-    // exercise with nothing to read, the exercise is written once more rather
-    // than served as an unanswerable question.
-    let sources = await verifySources(db, exercise, ctx, nextType);
-    if (sources.lostItsSource) {
-      const retry = exercisePrompt(ctx, { level, topic, type: nextType });
-      const regenerated = await generateJSON<Record<string, unknown>>(retry.system, retry.user, {
-        temperature: 0.7,
-        maxTokens: 2048,
-      }).catch(() => null);
-      if (regenerated) {
-        const retrySources = await verifySources(db, regenerated, ctx, nextType);
-        // Only accept the second attempt if it actually did better; otherwise
-        // keep the first, which at least had a validated question.
-        if (!retrySources.lostItsSource) {
-          exercise = regenerated;
-          sources = retrySources;
-        }
-      }
-    }
-
-    const doc = {
-      subject,
-      language: isLanguagePath(classification.taxonomy) ? subject : null,
-      taxonomy: classification.taxonomy,
-      taxonomyLeaf: leaf,
-      level, topic,
-      bankKey: bank,
-      topicKey,
-      tags: [topic.toLowerCase(), nextType, leaf, level],
-      ...safeExerciseFields(exercise, ctx.spec, sources.blocks),
-      validatedAt: new Date().toISOString(),
-      createdAt: new Date().toISOString(),
-    };
-    const insertResult = await db.collection("exercises").insertOne(doc);
-    const exerciseId = insertResult.insertedId.toString();
-
-    // Create SRS card
-    await db.collection("user_exercises").insertOne({
-      userId: user.userId,
-      exerciseId,
-      exerciseType: nextType,
-      topicKey,
-      ease: 2.5,
-      interval: 0,
-      repetitions: 0,
-      dueDate: now,
-      lastScore: -1,
-      updatedAt: now,
-    });
-
-    return { ...doc, _id: exerciseId };
   })
 
   // ── Record answer + SM-2 update ───────────────────────────────────────────

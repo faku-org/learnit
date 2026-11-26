@@ -138,6 +138,61 @@ describe("query building", () => {
     expect(params.get("nativeLanguage")).toBe("english");
   });
 
+  test("getNextExercise polls while the server generates and announces it once", async () => {
+    const replies = [
+      HttpResponse.json({ _status: "generating", retryAfterMs: 1500 }, { status: 202 }),
+      HttpResponse.json({ _status: "generating", retryAfterMs: 1500 }, { status: 202 }),
+      HttpResponse.json({ _id: "e9", _status: "ready", _delivery: "cached" }),
+    ];
+    let calls = 0;
+    server.use(http.get("http://localhost/api/exercises/next", () => replies[calls++]));
+    const waits: number[] = [];
+    let announced = 0;
+
+    const exercise = await getNextExercise(
+      { subject: "german", topic: "Greetings" },
+      {
+        onGenerating: () => announced++,
+        sleep: async (ms) => void waits.push(ms),
+      },
+    );
+
+    expect(exercise._id).toBe("e9");
+    expect(calls).toBe(3);
+    expect(announced).toBe(1);
+    expect(waits).toEqual([1500, 1500]);
+  });
+
+  test("getNextExercise caps the poll interval and never announces on a cache hit", async () => {
+    let calls = 0;
+    server.use(
+      http.get("http://localhost/api/exercises/next", () =>
+        calls++ === 0
+          ? HttpResponse.json({ _status: "generating", retryAfterMs: 60_000 }, { status: 202 })
+          : HttpResponse.json({ _id: "e1" }),
+      ),
+    );
+    const waits: number[] = [];
+    await getNextExercise({ subject: "german", topic: "Greetings" }, { sleep: async (ms) => void waits.push(ms) });
+    expect(waits).toEqual([3000]);
+
+    let announced = 0;
+    server.use(http.get("http://localhost/api/exercises/next", () => HttpResponse.json({ _id: "e2" })));
+    await getNextExercise({ subject: "german", topic: "Greetings" }, { onGenerating: () => announced++ });
+    expect(announced).toBe(0);
+  });
+
+  test("getNextExercise gives up when generation never finishes", async () => {
+    server.use(
+      http.get("http://localhost/api/exercises/next", () =>
+        HttpResponse.json({ _status: "generating", retryAfterMs: 5 }, { status: 202 }),
+      ),
+    );
+    await expect(
+      getNextExercise({ subject: "german", topic: "Greetings" }, { maxWaitMs: 0, sleep: async () => {} }),
+    ).rejects.toThrow("timed out");
+  });
+
   test("getExercises omits empty params and renders no query string", async () => {
     let url = "";
     server.use(

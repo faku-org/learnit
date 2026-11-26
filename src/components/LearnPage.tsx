@@ -167,6 +167,7 @@ function LearnInner() {
   const [submitted, setSubmitted] = useState(false);
   const [correct, setCorrect] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [loadingKind, setLoadingKind] = useState<"loading" | "generating">("loading");
   const [nativeLanguage, setNativeLanguage] = useState("english");
   const [gaveUp, setGaveUp] = useState(false);
   const [explaining, setExplaining] = useState(false);
@@ -442,9 +443,12 @@ function LearnInner() {
     const params = buildParams();
     if (!params) return;
 
+    setLoadingKind("loading");
     setLoading(true);
     try {
-      const data = await getNextExercise(params);
+      const data = await getNextExercise(params, {
+        onGenerating: () => setLoadingKind("generating"),
+      });
       setExercise(data as unknown as Exercise);
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : t("learn.toastLoadError"));
@@ -916,7 +920,9 @@ function LearnInner() {
           {loading && (
             <motion.div variants={itemVariants} className="text-center py-12">
               <Loader2 className="animate-spin mx-auto mb-4 text-accent" size={32} />
-              <p className="text-muted-foreground">{t("learn.loadingExercise")}</p>
+              <p role="status" className="text-muted-foreground">
+                {t(loadingKind === "generating" ? "learn.generatingExercise" : "learn.loadingExercise")}
+              </p>
             </motion.div>
           )}
 

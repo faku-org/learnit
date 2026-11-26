@@ -91,6 +91,52 @@ describe("LearnPage", () => {
     expect(screen.getByRole("button", { name: "Next Exercise" })).toBeInTheDocument();
   });
 
+  test("says it is generating while the server generates, then shows the exercise", async () => {
+    let polls = 0;
+    server.use(
+      http.get("http://localhost/api/path/current", () => HttpResponse.json(path)),
+      http.get("http://localhost/api/preferences", () =>
+        HttpResponse.json({ activePathId: "p1", nativeLanguage: "english", difficultyBias: 0 }),
+      ),
+      http.get("http://localhost/api/progress", () => HttpResponse.json(progress)),
+      http.get("http://localhost/api/exercises/next", () => {
+        polls += 1;
+        if (polls < 3) {
+          return HttpResponse.json({ _status: "generating", retryAfterMs: 20 }, { status: 202 });
+        }
+        return HttpResponse.json({ ...choiceExercise, _status: "ready", _delivery: "cached" });
+      }),
+    );
+
+    const user = userEvent.setup();
+    render(<LearnPage />);
+    await user.click(await screen.findByRole("button", { name: "Start Exercise" }));
+
+    expect(await screen.findByText("Generating exercises...")).toBeInTheDocument();
+    expect(screen.queryByText("Loading exercise...")).not.toBeInTheDocument();
+    expect(await screen.findByText("How do you say hello?")).toBeInTheDocument();
+    expect(polls).toBeGreaterThanOrEqual(3);
+  });
+
+  test("a cached exercise never shows the generating text", async () => {
+    server.use(
+      http.get("http://localhost/api/path/current", () => HttpResponse.json(path)),
+      http.get("http://localhost/api/preferences", () =>
+        HttpResponse.json({ activePathId: "p1", nativeLanguage: "english", difficultyBias: 0 }),
+      ),
+      http.get("http://localhost/api/progress", () => HttpResponse.json(progress)),
+      http.get("http://localhost/api/exercises/next", () =>
+        HttpResponse.json({ ...choiceExercise, _status: "ready", _delivery: "cached" }),
+      ),
+    );
+
+    const user = userEvent.setup();
+    render(<LearnPage />);
+    await user.click(await screen.findByRole("button", { name: "Start Exercise" }));
+    expect(await screen.findByText("How do you say hello?")).toBeInTheDocument();
+    expect(screen.queryByText("Generating exercises...")).not.toBeInTheDocument();
+  });
+
   test("a wrong answer shows the expected answer and does not advance", async () => {
     server.use(
       http.get("http://localhost/api/path/current", () => HttpResponse.json(path)),

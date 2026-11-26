@@ -367,6 +367,7 @@
     "startExercise": "Start Exercise",
     "resumePrevious": "Resume previous exercise",
     "loadingExercise": "Loading exercise...",
+    "generatingExercise": "Generating exercises...",
     "saveToVocabulary": "Save to vocabulary",
     "listenToPhrase": "Listen to phrase",
     "translatePhrase": "Translate phrase",
