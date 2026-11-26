@@ -83,18 +83,22 @@ export async function resolveMedia(
     // A cache that cannot be read is a cache miss.
   }
 
+  // The providers are independent (at most two, and YouTube only has something to say
+  // about a proposed id), so ask them together; results keep chain order for the dedupe.
+  const askable = chain.filter((p) => p.id !== "youtube" || claim.youtubeId);
+  const answers = await Promise.all(
+    askable.map(async (provider): Promise<MediaCandidate[] | null> => {
+      try {
+        return await provider.find(claim);
+      } catch {
+        return null;
+      }
+    }),
+  );
   const seen = new Set<string>();
   const refs: MediaCandidate[] = [];
   let answered = false;
-  for (const provider of chain) {
-    // YouTube has no search: it only has something to say about a proposed id.
-    if (provider.id === "youtube" && !claim.youtubeId) continue;
-    let found: MediaCandidate[] | null = null;
-    try {
-      found = await provider.find(claim);
-    } catch {
-      found = null;
-    }
+  for (const found of answers) {
     if (found === null) continue;
     answered = true;
     for (const ref of found) {
@@ -109,15 +113,18 @@ export async function resolveMedia(
     await db
       .collection("media_queries")
       .updateOne({ key }, { $set: { key, refs, verifiedAt: Date.now() } }, { upsert: true });
-    for (const ref of refs) {
-      await db
-        .collection("media")
-        .updateOne(
-          { mediaId: ref.mediaId },
-          { $set: { ...ref, verifiedAt: Date.now() }, $inc: { usageCount: 1 } },
-          { upsert: true },
-        );
-    }
+    // At most a handful of refs (the providers cap their results) and distinct mediaIds, so no two writes collide.
+    await Promise.all(
+      refs.map((ref) =>
+        db
+          .collection("media")
+          .updateOne(
+            { mediaId: ref.mediaId },
+            { $set: { ...ref, verifiedAt: Date.now() }, $inc: { usageCount: 1 } },
+            { upsert: true },
+          ),
+      ),
+    );
   } catch {
     // Failing to remember a result must not lose it.
   }
