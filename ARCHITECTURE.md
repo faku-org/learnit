@@ -44,6 +44,15 @@ api/src/accounts/
 - **CSRF:** `SameSite=Lax` plus an Origin check on every state-changing route in the accounts module.
 - **Deletion:** real deletion of every row the user owns, [ADR 0002](docs/adr/0002-account-deletion.md).
 
+## JobIt integration
+
+Catalog, assessments, consent-based sharing and signed credentials for JobIt, in `api/src/integration/`
+([ADR 0003](docs/adr/0003-jobit-integration.md)). `GET /api/catalog` is public and carries no user data.
+`/api/service/*` needs a service token from `SERVICE_TOKENS` (rotatable list, constant-time compare, separate from
+user sessions). The applicant grants consent per application with a one-time code, revocable and expiring;
+revoking cuts every read. Credentials are Ed25519-signed and verifiable with the public key at
+`/api/service/credentials/public-key`. Raw access to the cross-user lookups lives in `api/src/db/integration.ts`.
+
 ## Isolation
 
 Per-user data is reached only through `forUser(db, userId).of(collection)` in `api/src/db/scoped.ts`. It puts
