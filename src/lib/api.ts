@@ -1,3 +1,5 @@
+import type { ContentBlock } from "@shared/blocks";
+
 /**
  * The API is same-origin: the browser sends the HttpOnly session cookie by itself, nothing is kept in
  * `localStorage`. In dev the Astro server proxies `/api` to the API (see astro.config.mjs). Resolved against the
@@ -540,3 +542,15 @@ export const gradeSpeakResponse = (data: {
     method: "POST",
     body: JSON.stringify(data),
   });
+
+/**
+ * Supplementary material (pictures, pronunciation audio, a clip) for one topic, as content blocks.
+ * `order` is the module's 1-based order, `index` the topic's 0-based position in it. Best-effort: the
+ * server answers an empty list when a provider is down.
+ */
+export async function getTopicMedia(pathId: string, order: number, index: number): Promise<ContentBlock[]> {
+  const { blocks } = await request<{ blocks: ContentBlock[] }>(
+    `/api/path/${encodeURIComponent(pathId)}/module/${order}/topic/${index}/media`,
+  );
+  return blocks;
+}

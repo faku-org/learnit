@@ -21,6 +21,7 @@ const LEGACY: Record<string, number> = {
   "api/src/migrate-taxonomy.ts": 7,
   "api/src/semantic.ts": 3,
   "api/src/sources/index.ts": 4,
+  "api/src/sources/media.ts": 5,
   "api/src/taxonomy.ts": 4,
 };
 
